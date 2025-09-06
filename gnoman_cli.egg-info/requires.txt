@@ -1,0 +1,10 @@
+eth-account
+web3>=6
+eth-abi
+cryptography
+keyring
+python-dotenv
+rich
+
+[:python_version < "3.11"]
+pycryptodome

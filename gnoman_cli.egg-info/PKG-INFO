@@ -1,3 +1,28 @@
+Metadata-Version: 2.4
+Name: gnoman-cli
+Version: 0.1.0
+Summary: Gnosis Safe, HD/hidden wallets, and keyring manager — terminal-native.
+Project-URL: Homepage, https://github.com/74Thirsty/gnoman
+Project-URL: Source, https://github.com/74Thirsty/gnoman
+Project-URL: Issues, https://github.com/74Thirsty/gnoman/issues
+Classifier: Programming Language :: Python :: 3
+Classifier: Environment :: Console
+Classifier: Topic :: Security :: Cryptography
+Classifier: Topic :: Internet :: WWW/HTTP
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+License-File: LICENSE.md
+License-File: LICENSEE.md
+Requires-Dist: eth-account
+Requires-Dist: web3>=6
+Requires-Dist: eth-abi
+Requires-Dist: pycryptodome; python_version < "3.11"
+Requires-Dist: cryptography
+Requires-Dist: keyring
+Requires-Dist: python-dotenv
+Requires-Dist: rich
+Dynamic: license-file
+
 ![Sheen Banner](https://raw.githubusercontent.com/74Thirsty/74Thirsty/main/assets/gnoman.svg)
 
 ---

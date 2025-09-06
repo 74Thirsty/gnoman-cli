@@ -1,0 +1,4 @@
+2025-09-06 18:35:59,758 - gnoman - INFO - L73 - _setup_logger - ✅ Logger initialized (writing to gnoman.log)
+2025-09-06 18:35:59,759 - gnoman - INFO - L95 - splash - GNOMAN startup banner displayed.
+2025-09-06 18:35:59,759 - gnoman - INFO - L96 - splash - © 2025 Christopher Hirschauer — All Rights Reserved
+2025-09-06 18:35:59,759 - gnoman - INFO - L97 - splash - Licensed under GNOMAN License (see LICENSE.md)
