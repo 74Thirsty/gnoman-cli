@@ -4,6 +4,11 @@
 
 # GNOMAN: Guardian of Safes, Master of Keys
 
+![Docker Pulls](https://img.shields.io/docker/pulls/gadgetsaavy/gnoman?style=for-the-badge\&logo=docker\&color=2496ED)
+![Docker Image Size (tag)](https://img.shields.io/docker/image-size/gadgetsaavy/gnoman/latest?style=for-the-badge\&logo=docker\&color=0db7ed)
+![PyPI](https://img.shields.io/pypi/v/gnoman-cli?style=for-the-badge\&logo=python\&color=3776AB)
+![GitHub Repo stars](https://img.shields.io/github/stars/74Thirsty/gnoman-cli?style=for-the-badge\&logo=github\&color=181717)
+
 **GNOMAN** is a standalone command-line toolkit for those who demand uncompromising control over digital assets. It’s the forge where wallets, safes, and keys are shaped into reliable, battle-tested tools.
 
 ### Core Functions
@@ -297,7 +302,16 @@ You’re fully armed now:
 * Safe Manager can fund, send tokens, execute tx, manage owners/threshold, and toggle the 24h guard.
 * Wallet Manager handles HD derivations, “hidden tree” paths, imports/exports, and encrypted local storage.
 
-Got it — here’s a **“License” section** you can drop into your README, docs, or site. It points directly to your `LICENSE.md` (the terms you wrote) and `LICENSEE.md` (the roster or registry of who actually holds signed paper licenses). It keeps the same weighty GNOMAN vibe:
+
+**Critical Update — ABI File Required**
+
+This update introduces a mandatory dependency on the full Gnosis Safe ABI.
+The file abi/GnosisSafe.json must now be present in the project root (~/Apps/gnoman-cli/abi/) for all Safe-related functions to work.
+
+Without this file, core features (getOwners, getThreshold, getGuard, execTransaction, etc.) will fail with ABI resolution errors.
+
+This is a blocking requirement for anyone pulling or running core.py. Ensure you have synced the latest repo state and the abi/ directory before running GNOMAN.
+
 
 ---
 
