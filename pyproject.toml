@@ -4,9 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gnoman-cli"
-version = "0.1.0"
-description = "Gnosis Safe, HD/hidden wallets, and keyring manager — terminal-native."
-readme = {file = "README.md", content-type = "text/markdown"}
+version = "0.1.3"
+description = "Your short one-line summary here"
+readme = "README.md"
+authors = [
+  { name = "Christopher Hirschauer", email = "c.hirschauer@gmail.com" }
+]
+license = { file = "LICENSE.md" }
 requires-python = ">=3.9"
 dependencies = [
   "eth-account",
@@ -26,9 +30,9 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/74Thirsty/gnoman"
-Source = "https://github.com/74Thirsty/gnoman"
-Issues = "https://github.com/74Thirsty/gnoman/issues"
+Homepage = "https://github.com/74Thirsty/gnoman-cli"
+Source = "https://github.com/74Thirsty/gnoman-cli"
+Issues = "https://github.com/74Thirsty/gnoman-cli/issues"
 
 [project.scripts]
 gnoman = "gnoman.cli:main"
