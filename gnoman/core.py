@@ -46,6 +46,7 @@ from eth_account.signers.local import LocalAccount  # L039
 try:  # pragma: no branch - import resolution is environment-dependent.
     from .utils.abi import load_safe_abi
     from .utils import keyring_index
+    from .utils.keyring_compat import load_keyring_backend
 except ImportError:
     _pkg_root = Path(__file__).resolve().parent
     _project_root = _pkg_root.parent
@@ -56,9 +57,11 @@ except ImportError:
     try:
         from gnoman.utils.abi import load_safe_abi
         from gnoman.utils import keyring_index
+        from gnoman.utils.keyring_compat import load_keyring_backend
     except ImportError:
         from utils.abi import load_safe_abi  # type: ignore[import]
         import keyring_index  # type: ignore[import]
+        from keyring_compat import load_keyring_backend  # type: ignore[import]
 
 Account.enable_unaudited_hdwallet_features()  # L040
 
@@ -70,11 +73,8 @@ ERC20_ABI_MIN = [
     {"constant": True, "inputs": [], "name": "decimals","outputs":[{"name":"","type":"uint8"}], "type":"function"},
 ]  # L047
 
-# Optional keyring  # L048
-try:
-    import keyring  # L049
-except ImportError:
-    keyring = None  # L051
+# Optional keyring (with fallback for environments without a native backend)
+keyring = load_keyring_backend()
 
 
 # ───────── Logger (line-numbered) ─────────  # L052
