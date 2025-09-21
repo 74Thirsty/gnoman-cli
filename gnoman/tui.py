@@ -316,6 +316,27 @@ def _safe_addstr(win: "curses._CursesWindow", y: int, x: int, text: str, attr: i
         pass
 
 
+def _clear_region(
+    win: "curses._CursesWindow", top: int, left: int, height: int, width: int
+) -> None:
+    """Blank a rectangular region to avoid artefacts from previous frames."""
+
+    if height <= 0 or width <= 0:
+        return
+    max_y, max_x = win.getmaxyx()
+    start_y = max(0, top)
+    end_y = min(max_y, top + height)
+    start_x = max(0, left)
+    if start_x >= max_x:
+        return
+    width = min(width, max_x - start_x)
+    if width <= 0:
+        return
+    blank = " " * width
+    for row in range(start_y, end_y):
+        _safe_addstr(win, row, start_x, blank)
+
+
 def _render_resize_hint(stdscr: "curses._CursesWindow", palette: Dict[str, int]) -> None:
     """Render a hint asking the operator to enlarge their terminal."""
 
@@ -432,7 +453,10 @@ def _render_dashboard(
         _safe_addstr(stdscr, y, divider_x, "|", palette["subtitle"])
 
     # Detail pane
-    detail_y = 3
+    detail_top = 3
+    if detail_width > 0:
+        _clear_region(stdscr, detail_top, detail_x, max(0, separator_y - detail_top), detail_width)
+    detail_y = detail_top
     _safe_addstr(
         stdscr,
         detail_y,
@@ -441,6 +465,15 @@ def _render_dashboard(
         palette["detail_heading"],
     )
     detail_y += 1
+    tagline = str(active.get("tagline") or "").strip()
+    if tagline:
+        for line in _wrap_text(tagline, detail_width):
+            if detail_y >= detail_limit:
+                break
+            _safe_addstr(stdscr, detail_y, detail_x, line, palette["subtitle"])
+            detail_y += 1
+        if detail_y < detail_limit:
+            detail_y += 1
     for line in _wrap_text(str(active["description"]), detail_width):
         if detail_y >= detail_limit:
             break
@@ -540,15 +573,18 @@ def _render_submenu(
 
     status_y = menu_start + total + 1
     bottom_limit = height - 5
-    if status_lines and status_y <= bottom_limit:
-        _safe_addstr(stdscr, status_y, 4, "Last action:", palette["detail_heading"])
-        status_y += 1
-        for line in status_lines:
-            for wrapped in _wrap_text(str(line), max(0, width - 10)):
-                if status_y > bottom_limit:
-                    break
-                _safe_addstr(stdscr, status_y, 6, wrapped, palette["detail_text"])
-                status_y += 1
+    status_width = max(0, width - 8)
+    if status_y <= bottom_limit and status_width > 0:
+        _clear_region(stdscr, status_y, 4, max(0, bottom_limit - status_y + 1), status_width)
+        if status_lines:
+            _safe_addstr(stdscr, status_y, 4, "Last action:", palette["detail_heading"])
+            status_y += 1
+            for line in status_lines:
+                for wrapped in _wrap_text(str(line), max(1, status_width - 2)):
+                    if status_y > bottom_limit:
+                        break
+                    _safe_addstr(stdscr, status_y, 6, wrapped, palette["detail_text"])
+                    status_y += 1
 
     footer_y = height - 2
     footer_text = "Press [q] to return"
