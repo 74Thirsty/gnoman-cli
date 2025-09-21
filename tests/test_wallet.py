@@ -10,6 +10,7 @@ import unittest
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 
+from gnoman.utils import keyring_index
 from gnoman.wallet import (
     DerivationResolver,
     HDWalletTree,
@@ -104,6 +105,13 @@ class WalletTestCase(unittest.TestCase):
         manager.create_account("alpha", path="default")
         with self.assertRaises(WalletManagerError):
             manager.create_account("alpha", path="default")
+
+    def test_seed_manager_tracks_keys_in_index(self) -> None:
+        keys = keyring_index.list_keys(self.keyring, "test")
+        self.assertIn(self.seed_manager.MNEMONIC_KEY, keys)
+        self.seed_manager.clear_mnemonic()
+        keys_after = keyring_index.list_keys(self.keyring, "test")
+        self.assertNotIn(self.seed_manager.MNEMONIC_KEY, keys_after)
 
 
 if __name__ == "__main__":  # pragma: no cover
