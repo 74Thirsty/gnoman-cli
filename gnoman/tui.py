@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import curses
 
-
-MENU_LINE = "[S] Safe  [T] Tx  [C] Secrets  [A] Audit  [G] Guard  [P] Plugins"
+MENU_LINE = (
+    "[S] Safe  [T] Tx  [C] Secrets  [Y] Sync  [A] Audit  "
+    "[G] Graph  [U] Autopilot  [R] Rescue  [P] Plugins  [D] Guard"
+)
 
 
 def launch_tui() -> None:
@@ -13,7 +15,7 @@ def launch_tui() -> None:
 
     def main(stdscr) -> None:
         curses.curs_set(0)
-        stdscr.addstr(0, 0, "GNOMAN v0.2.0 Mission Control")
+        stdscr.addstr(0, 0, "GNOMAN v0.3.0 Mission Control")
         stdscr.addstr(2, 0, MENU_LINE)
         stdscr.refresh()
         stdscr.getch()

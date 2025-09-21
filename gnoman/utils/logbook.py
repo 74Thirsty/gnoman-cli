@@ -8,7 +8,8 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Dict
 
-LOG_DIR = Path.home() / ".gnoman"
+LOG_ROOT = Path.home() / ".gnoman"
+LOG_DIR = LOG_ROOT / "logs"
 LOG_FILE = LOG_DIR / "gnoman.log"
 
 
@@ -17,7 +18,7 @@ def _get_logger() -> logging.Logger:
     if logger.handlers:
         return logger
 
-    LOG_DIR.mkdir(exist_ok=True)
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
     handler = RotatingFileHandler(LOG_FILE, maxBytes=1_000_000, backupCount=5)
     formatter = logging.Formatter("%(message)s")
 

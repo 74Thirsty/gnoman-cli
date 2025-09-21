@@ -5,6 +5,23 @@ This project follows [Semantic Versioning](https://semver.org/) rules.
 
 ---
 
+## [0.3.0] — 2025-10-01
+
+### Added
+
+* Cross-environment `gnoman sync` with drift detection and reconciliation flags.
+* Forensic audit pipeline producing signed JSON/PDF snapshots under `~/.gnoman/audits/`.
+* Transaction simulator upgrades with local fork tracing, ML toggles, and plugin-aware autopilot orchestration.
+* Incident recovery suite: `gnoman rescue safe`, `gnoman rotate all`, and `gnoman freeze` controls.
+* AES integrations for graph rendering, plugin hot-swap, and system guardian monitoring with alert fan-out.
+
+### Changed
+
+* Rotating forensic log now lives at `~/.gnoman/logs/gnoman.log`.
+* Curses TUI highlights new mission control panels for sync, graph, autopilot, and recovery tooling.
+
+---
+
 ## [0.2.0] — 2025-09-20
 
 ### Added
