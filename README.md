@@ -14,7 +14,7 @@ commands, a curses dashboard, and structured forensic logging so every Safe inte
 
 ## Mission Control CLI
 
-GNOMAN v0.3.0 expands the argparse-powered surface with sync, graphing, autopilot, and incident recovery workflows. Launch it with:
+GNOMAN now ships a modular CLI that mirrors the original `tools/core.py` feature set. Launch it with:
 
 ```bash
 python -m gnoman --help
@@ -23,81 +23,49 @@ python -m gnoman --help
 ### Safe lifecycle
 
 ```bash
-gnoman safe propose --to <addr> --value <eth> --data <calldata>
-gnoman safe sign <proposal-id>
-gnoman safe exec <proposal-id>
-gnoman safe status <SAFE_ADDR>
+gnoman safe info
+gnoman safe fund <ETH> --signer-key EXECUTOR_KEY
+gnoman safe add-owner <ADDRESS> --signer-key EXECUTOR_KEY
+gnoman safe guard set <DELAY_GUARD> --signer-key EXECUTOR_KEY
 ```
 
-### Transaction operations
+### Wallet management
 
 ```bash
-gnoman tx simulate [<proposal-id>] [--plan path.json] [--trace] [--ml-off]
-gnoman tx exec <proposal-id>
+gnoman wallet mnemonic generate
+gnoman wallet new <LABEL> [--path template]
+gnoman wallet scan [--count 10] [--hidden]
+gnoman wallet vanity --prefix 0xabc --max-attempts 100000
 ```
 
-### Secret management
+### Secret synchronisation
 
 ```bash
-gnoman secrets list
-gnoman secrets add <KEY> <VALUE>
-gnoman secrets rotate <KEY>
-gnoman secrets rm <KEY>
+gnoman sync status
+gnoman sync drift
+gnoman sync force
+gnoman sync rotate RPC_URL
 ```
+Secrets are resolved keyring-first with `.env` as fallback. Drift detection highlights mismatched values before you reconcile.
 
-### Cross-environment sync
-
-```bash
-gnoman sync [--force | --reconcile]
-```
-Synchronise keyring, `.env`, `.env.secure`, and remote vault entries. Drift can be resolved interactively or forced to the AES priority order.
-
-### Simulation and autopilot
-
-```bash
-gnoman tx simulate ...
-gnoman autopilot [--dry-run | --execute | --alerts-only] [--plan plan.json]
-```
-The autopilot pipeline fetches loans, builds trades, validates with ML, prepares Safe payloads, simulates on an Anvil fork, and queues, alerts, or executes depending on flags.
-
-### Forensics and monitoring
+### Forensic audit
 
 ```bash
 gnoman audit
-gnoman guard --cycles 5
 ```
-`gnoman audit` produces a signed JSON+PDF snapshot in `~/.gnoman/audits/`. `gnoman guard` runs the System Guardian daemon to check secrets, balances, quorum, gas, and arbitrage opportunities, dispatching alerts to Discord/Slack/PagerDuty.
+Generates a signed JSON and PDF report covering Safe configuration, derived wallets, and secret metadata. Output is stored in `~/.gnoman/audits/`.
 
-### Graph visualisation
+### ABI utilities
 
 ```bash
-gnoman graph view [--format svg|png|html] [--output custom/path]
+gnoman abi show
+gnoman abi encode execTransaction --args '["0xdead...",0,"0x",0]'
 ```
-Renders AES GraphManager output with neon-highlighted profitable routes. Assets are stored in `~/.gnoman/graphs/` by default.
-
-### Incident recovery
-
-```bash
-gnoman rescue safe <SAFE_ADDR>
-gnoman rotate all
-gnoman freeze <wallet|safe> <id> [--reason text]
-```
-Recovery tooling walks operators through Safe quorum loss, rotates all wallets/owners, and freezes compromised entities until an explicit unfreeze event.
-
-### Plugin management
-
-```bash
-gnoman plugin list
-gnoman plugin add <name>
-gnoman plugin remove <name>
-gnoman plugin swap <name> <version>
-```
-Hot-swapping records schema validation and maintains a forensic history of plugin versions used by transactions.
+Inspect the bundled Safe ABI, validate overrides, and encode calldata with forensic logging.
 
 ## Terminal UI
 
-Running `python -m gnoman` with no subcommand launches the curses mission control surface. The scaffolded dashboard displays
-hotkeys for Safe, Tx, Secrets, Sync, Audit, Graph, Autopilot, Rescue, Plugin, and Guard panels. Press any key to exit the placeholder view.
+The curses dashboard has been retired in favour of the CLI. Running `python -m gnoman` now prints a quick reference pointing to the `safe`, `wallet`, `sync`, `audit`, and `abi` command groups.
 
 ## Development
 
