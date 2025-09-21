@@ -43,11 +43,19 @@ from web3.exceptions import ContractLogicError  # L037
 from eth_account import Account  # L038
 from eth_account.signers.local import LocalAccount  # L039
 
-if __package__ in (None, ""):
-    sys.path.append(str(Path(__file__).resolve().parent.parent))
-    from gnoman.utils.abi import load_safe_abi
-else:
+try:  # pragma: no branch - import resolution is environment-dependent.
     from .utils.abi import load_safe_abi
+except ImportError:
+    _pkg_root = Path(__file__).resolve().parent
+    _project_root = _pkg_root.parent
+    for candidate in (_project_root, _pkg_root):
+        candidate_str = str(candidate)
+        if candidate_str not in sys.path:
+            sys.path.insert(0, candidate_str)
+    try:
+        from gnoman.utils.abi import load_safe_abi
+    except ImportError:
+        from utils.abi import load_safe_abi  # type: ignore[import]
 
 Account.enable_unaudited_hdwallet_features()  # L040
 
