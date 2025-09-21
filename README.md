@@ -39,6 +39,39 @@ Crypto tools are often too casual (browser plugins) or too arcane (raw JSON-RPC)
 No invisible storage. No silent failures. No hidden assumptions. GNOMAN enforces explicitness, persistence, and resilience—so your keys, safes, and actions remain under your control.
 
 
+## Mission Control CLI (v0.2)
+
+GNOMAN now ships with a mission-control style interface inspired by the spec above. Use scriptable commands for automation or drop into the curses dashboard when you want a tactile overview.
+
+### Primary commands
+
+```bash
+gnoman safe propose --to <addr> --value <eth> --data <calldata>
+gnoman safe sign <proposal-id>
+gnoman safe collect <proposal-id>
+gnoman safe exec <proposal-id>
+gnoman safe status <SAFE_ADDR>
+
+gnoman tx simulate <proposal-id>
+
+gnoman secrets list
+gnoman secrets add <KEY> <VALUE>
+gnoman secrets rotate <KEY>
+gnoman secrets audit
+
+gnoman audit
+gnoman guard --transport discord --transport email
+
+gnoman plugin list
+gnoman plugin add <name>
+gnoman plugin remove <name>
+```
+
+### Interactive dashboard
+
+Running `gnoman` without arguments (or with `--tui`) launches a curses interface that mirrors the wireframes in the design document: Safe dashboards, masked secrets view, transaction simulation summary, and plugin management all live behind hotkeys so operators can see state at a glance.
+
+
 # Quick start (first run)
 
 1. **After making it executable, Run it**
