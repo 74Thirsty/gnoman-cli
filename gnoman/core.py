@@ -915,12 +915,19 @@ def main_menu() -> None:  # L1001
             print(f"Error: {e}. See gnoman.log.")
 
 
-# ───────── Entrypoint ─────────  # L1030
-if __name__ == "__main__":
+def run_console(*, shutdown_logging: bool = True) -> None:
+    """Launch the legacy splash screen and interactive menu."""
+
     try:
         splash()
         main_menu()
     finally:
-        logger.info("🧹 gnoman exiting.")
-        logging.shutdown()
+        logger.info("🧹 gnoman exiting via legacy console helper.")
+        if shutdown_logging:
+            logging.shutdown()
+
+
+# ───────── Entrypoint ─────────  # L1030
+if __name__ == "__main__":
+    run_console()
 # EOF  # L1038
