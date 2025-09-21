@@ -1,11 +1,11 @@
-"""Argparse CLI bridging mission control dashboard and legacy console."""
+"""Argparse CLI exposing the GNOMAN mission control surface."""
 
 from __future__ import annotations
 
 import argparse
 from typing import Any, Callable, Optional, Sequence
 
-from . import __version__, core
+from . import __version__
 from .commands import (
     audit,
     autopilot as autopilot_cmd,
@@ -22,13 +22,6 @@ from .commands import (
 from .tui import launch_tui
 
 Handler = Callable[[argparse.Namespace], Any]
-
-
-def _legacy_entrypoint(_args: argparse.Namespace) -> None:
-    """Invoke the legacy GNOMAN console and exit once it completes."""
-
-    core.logger.info("🔁 Launching legacy console via CLI command.")
-    core.run_console()
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -240,10 +233,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Emit a progress log every N attempts",
     )
     wallet_vanity.set_defaults(handler=wallet.vanity)
-
-    # Legacy command
-    legacy_parser = subparsers.add_parser("legacy", help="Launch the original GNOMAN console")
-    legacy_parser.set_defaults(handler=_legacy_entrypoint)
 
     return parser
 

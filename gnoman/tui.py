@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import curses
 import io
-from contextlib import redirect_stdout
+from contextlib import contextmanager, redirect_stdout
 from dataclasses import dataclass, field
 from datetime import datetime
 from textwrap import wrap
 from types import SimpleNamespace
-from typing import Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
+from unittest import mock
 
 from . import core
 from .commands import (
@@ -34,6 +35,20 @@ MenuItem = Dict[str, object]
 MenuCallback = Callable[["MenuContext"], Optional[Sequence[str]]]
 MenuEntry = Tuple[str, Optional[MenuCallback]]
 MenuBuilder = Callable[["MenuContext"], Sequence[MenuEntry]]
+
+LEGACY_BANNER_LINES: Tuple[str, ...] = (
+    " ██████╗ ███╗   ██╗ ██████╗ ███╗   ███╗ █████╗ ███╗   ██╗",
+    "██╔════╝ ████╗  ██║██╔═══██╗████╗ ████║██╔══██╗████╗  █║",
+    "██║  ███╗██╔██╗ ██║██║   ██║██╔████╔██║███████║██╔██╗ ██║",
+    "██║   ██║██║╚██╗██║██║   ██║██║╚██╔╝██║██╔══██║██║╚██╗██║",
+    "╚██████╔╝██║ ╚████║╚██████╔╝██║ ╚═╝ ██║██║  ██║██║ ╚████║",
+    " ╚═════╝ ╚═╝  ╚═══╝ ╚═════╝ ╚═╝     ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝",
+    "",
+    "        GNOMAN — Safe • Wallet • Keys • Hold24h",
+    "        © 2025 Christopher Hirschauer — All Rights Reserved",
+    "        Licensed under GNOMAN License (see LICENSE.md)",
+    "───────────────────────────────────────────────────────────",
+)
 
 MENU_ITEMS: List[MenuItem] = [
     {
@@ -65,6 +80,20 @@ MENU_ITEMS: List[MenuItem] = [
         ],
     },
     {
+        "key": "W",
+        "title": "Wallet",
+        "tagline": "Operate HD wallets and hidden derivation trees.",
+        "description": (
+            "Generate or import mnemonic seeds, explore default and hidden "
+            "account paths, and export discovered addresses with labels."
+        ),
+        "commands": [
+            "Mission Control › Wallet",
+            "Generate / import mnemonic",
+            "Scan HD trees • Export wallet_export.json",
+        ],
+    },
+    {
         "key": "C",
         "title": "Secrets",
         "tagline": "Manage encrypted keyrings and vault entries.",
@@ -76,6 +105,20 @@ MENU_ITEMS: List[MenuItem] = [
             "gnoman secrets list",
             "gnoman secrets add <KEY> <VALUE>",
             "gnoman secrets rotate <KEY>",
+        ],
+    },
+    {
+        "key": "K",
+        "title": "Key Manager",
+        "tagline": "Work directly with keyring-backed secrets.",
+        "description": (
+            "Add, retrieve, delete, or enumerate keyring entries just like the "
+            "original GNOMAN console workflow."
+        ),
+        "commands": [
+            "Mission Control › Key Manager",
+            "Add / retrieve / delete secrets",
+            "List keyring entries",
         ],
     },
     {
@@ -173,18 +216,16 @@ MENU_ITEMS: List[MenuItem] = [
         ],
     },
     {
-        "key": "L",
-        "title": "Legacy",
-        "tagline": "Access the original GNOMAN console menus.",
+        "key": "I",
+        "title": "About",
+        "tagline": "Review the GNOMAN license and provenance.",
         "description": (
-            "Launch the legacy splash screen and menu-driven interface to operate "
-            "Safe, wallet, and key manager workflows exactly as before."
+            "Read the proprietary usage terms, authorship, and licensing "
+            "details preserved from the original console splash screen."
         ),
         "commands": [
-            "gnoman legacy",
-            "Mission Control › Legacy Console",
+            "Mission Control › About & License",
         ],
-        "mode": "legacy",
     },
 ]
 
@@ -290,6 +331,42 @@ def _render_resize_hint(stdscr: "curses._CursesWindow", palette: Dict[str, int])
     stdscr.refresh()
 
 
+def _render_banner_screen(stdscr: "curses._CursesWindow", palette: Dict[str, int]) -> bool:
+    """Display the legacy ASCII banner and wait for a key press."""
+
+    while True:
+        stdscr.erase()
+        height, width = stdscr.getmaxyx()
+
+        min_height = max(MIN_HEIGHT, len(LEGACY_BANNER_LINES) + 4)
+        if height < min_height or width < MIN_WIDTH:
+            _render_resize_hint(stdscr, palette)
+            key = stdscr.getch()
+            if key in QUIT_KEYS:
+                return False
+            if key == curses.KEY_RESIZE:
+                continue
+            continue
+
+        for idx, line in enumerate(LEGACY_BANNER_LINES):
+            attr = palette["title"] if idx < 6 else palette["subtitle"]
+            col = max(0, (width - len(line)) // 2)
+            _safe_addstr(stdscr, idx, col, line, attr)
+
+        prompt = "Press any key to enter Mission Control"
+        prompt_row = len(LEGACY_BANNER_LINES) + 1
+        prompt_col = max(0, (width - len(prompt)) // 2)
+        _safe_addstr(stdscr, prompt_row, prompt_col, prompt, palette["footer"])
+        stdscr.refresh()
+
+        key = stdscr.getch()
+        if key == curses.KEY_RESIZE:
+            continue
+        if key in QUIT_KEYS:
+            return False
+        return True
+
+
 def _render_dashboard(
     stdscr: "curses._CursesWindow", selected: int, palette: Dict[str, int]
 ) -> bool:
@@ -319,15 +396,31 @@ def _render_dashboard(
         _safe_addstr(stdscr, 2, 1, "-" * (width - 2), palette["subtitle"])
 
     # Menu column
-    _safe_addstr(stdscr, 3, menu_x, "Modules", palette["detail_heading"])
-    for idx, item in enumerate(MENU_ITEMS):
-        y = 4 + idx
-        if y >= detail_limit:
-            break
+    menu_start = 3
+    items_start = menu_start + 1
+    visible_rows = max(0, detail_limit - items_start)
+    total_items = len(MENU_ITEMS)
+    first_index = 0
+    if visible_rows and visible_rows < total_items:
+        first_index = min(max(0, selected - visible_rows + 1), total_items - visible_rows)
+    last_index = total_items if not visible_rows else min(total_items, first_index + visible_rows)
+
+    header_label = "Modules"
+    if visible_rows and visible_rows < total_items:
+        if first_index > 0:
+            header_label = f"↑ {header_label}"
+        if last_index < total_items:
+            header_label = f"{header_label} ↓"
+    _safe_addstr(stdscr, menu_start, menu_x, " " * menu_width)
+    _safe_addstr(stdscr, menu_start, menu_x, header_label[:menu_width], palette["detail_heading"])
+
+    for view_idx, item_idx in enumerate(range(first_index, last_index)):
+        item = MENU_ITEMS[item_idx]
+        y = items_start + view_idx
         label = f"[{item['key']}] {item['title']}"
         padded = label[:menu_width].ljust(menu_width)
         _safe_addstr(stdscr, y, menu_x, " " * menu_width)
-        if idx == selected:
+        if item_idx == selected:
             _safe_addstr(stdscr, y, menu_x, padded, palette["menu_active"])
         else:
             _safe_addstr(stdscr, y, menu_x, padded, palette["menu_inactive"])
@@ -523,6 +616,51 @@ def _prompt_input(
         return value
 
 
+def _prompt_secret(
+    ctx: MenuContext,
+    prompt: str,
+    *,
+    required: bool = False,
+) -> Optional[str]:
+    """Prompt for sensitive input without echoing characters."""
+
+    stdscr = ctx.stdscr
+    height, width = stdscr.getmaxyx()
+    message = f"{prompt}: "
+    input_y = max(0, height - 4)
+
+    while True:
+        _clear_input_line(ctx)
+        _safe_addstr(stdscr, input_y, 2, message[: max(0, width - 4)], ctx.palette["detail_heading"])
+        start_x = min(width - 3, 2 + len(message))
+        max_chars = max(1, width - start_x - 2)
+        curses.noecho()
+        try:
+            curses.curs_set(1)
+        except curses.error:
+            pass
+        stdscr.move(input_y, start_x)
+        stdscr.refresh()
+        try:
+            raw = stdscr.getstr(input_y, start_x, max_chars)
+        except curses.error:
+            raw = b""
+        finally:
+            try:
+                curses.curs_set(0)
+            except curses.error:
+                pass
+        value = raw.decode("utf-8", errors="ignore").strip()
+        _clear_input_line(ctx)
+
+        if value:
+            return value
+        if not required:
+            return None
+        curses.flash()
+        _menu_log("prompt_missing", prompt=prompt, menu=ctx.current_menu)
+
+
 def _prompt_bool(ctx: MenuContext, prompt: str, *, default: bool = False) -> bool:
     """Prompt the operator for a boolean decision."""
 
@@ -608,6 +746,60 @@ def _prompt_choice(
                 return choice.lower()
         curses.flash()
         _menu_log("invalid_input", prompt=prompt, value=response, menu=ctx.current_menu, kind="choice")
+
+
+@contextmanager
+def _patched_prompts(
+    *, inputs: Optional[Iterable[str]] = None, secrets: Optional[Iterable[str]] = None
+) -> Iterable[str]:
+    """Temporarily override ``input``/``getpass`` with canned values."""
+
+    input_iter = iter(inputs or [])
+    secret_iter = iter(secrets or [])
+
+    def _next_input(_prompt: str = "") -> str:
+        return next(input_iter, "")
+
+    def _next_secret(_prompt: str = "") -> str:
+        return next(secret_iter, "")
+
+    with mock.patch("builtins.input", _next_input), mock.patch("getpass.getpass", _next_secret):
+        yield
+
+
+def _run_legacy_callable(
+    func: Callable[..., object],
+    *,
+    inputs: Optional[Iterable[str]] = None,
+    secrets: Optional[Iterable[str]] = None,
+    args: Sequence[object] = (),
+    kwargs: Optional[Dict[str, object]] = None,
+) -> List[str]:
+    """Execute ``func`` capturing stdout and optionally providing prompt input."""
+
+    buffer = io.StringIO()
+    call_kwargs = dict(kwargs or {})
+    with _patched_prompts(inputs=inputs, secrets=secrets), redirect_stdout(buffer):
+        func(*args, **call_kwargs)
+    lines = [line.rstrip() for line in buffer.getvalue().splitlines() if line.strip()]
+    if not lines:
+        lines.append("Operation complete.")
+    return lines
+
+
+def _ensure_safe_initialised(ctx: MenuContext) -> None:
+    """Ensure the legacy Safe context has been bootstrapped."""
+
+    safe_ctx = getattr(core, "SAFE", None)
+    if safe_ctx and getattr(safe_ctx, "contract", None) and getattr(safe_ctx, "addr", None):
+        return
+    try:
+        core.safe_init()
+    except RuntimeError:
+        safe_address = _prompt_input(ctx, "Safe address", required=True)
+        assert safe_address is not None
+        with _patched_prompts(inputs=[safe_address]):
+            core.safe_init()
 
 
 def _invoke_command(
@@ -810,8 +1002,153 @@ def _build_safe_menu(ctx: MenuContext) -> Sequence[MenuEntry]:
     return [
         ("Proposal workflow", _enter_safe_proposals),
         ("Safe status overview", _action_safe_status),
+        ("Legacy Safe operations", _show_safe_legacy_menu),
         ("Back", None),
     ]
+
+
+def _build_safe_legacy_menu(ctx: MenuContext) -> Sequence[MenuEntry]:
+    return [
+        ("Show Safe info", _legacy_action_safe_info),
+        ("Fund Safe with ETH", _legacy_action_safe_fund),
+        ("Send ERC20 to Safe", _legacy_action_safe_send_erc20),
+        ("Execute Safe transaction", _legacy_action_safe_exec),
+        ("Add owner", _legacy_action_safe_add_owner),
+        ("Remove owner", _legacy_action_safe_remove_owner),
+        ("Change threshold", _legacy_action_safe_change_threshold),
+        ("Add delegate", _legacy_action_safe_add_delegate),
+        ("Remove delegate", _legacy_action_safe_remove_delegate),
+        ("List delegates", _legacy_action_safe_list_delegates),
+        ("Show guard", _legacy_action_safe_show_guard),
+        ("Enable guard", _legacy_action_safe_enable_guard),
+        ("Disable guard", _legacy_action_safe_disable_guard),
+        ("Back", None),
+    ]
+
+
+def _show_safe_legacy_menu(ctx: MenuContext) -> None:
+    _open_submenu(ctx, "Safe (Legacy)", _build_safe_legacy_menu)
+
+
+def _legacy_action_safe_info(ctx: MenuContext) -> List[str]:
+    _ensure_safe_initialised(ctx)
+    return _run_legacy_callable(core.safe_show_info)
+
+
+def _legacy_action_safe_fund(ctx: MenuContext) -> List[str]:
+    _ensure_safe_initialised(ctx)
+    amount = _prompt_input(ctx, "Amount ETH to send", required=True)
+    assert amount is not None
+    return _run_legacy_callable(core.safe_fund_eth, inputs=[amount])
+
+
+def _legacy_action_safe_send_erc20(ctx: MenuContext) -> List[str]:
+    _ensure_safe_initialised(ctx)
+    token = _prompt_input(ctx, "ERC20 token address", required=True)
+    amount = _prompt_input(ctx, "Amount of token", required=True)
+    assert token is not None and amount is not None
+    return _run_legacy_callable(core.safe_send_erc20, inputs=[token, amount])
+
+
+def _legacy_action_safe_exec(ctx: MenuContext) -> List[str]:
+    _ensure_safe_initialised(ctx)
+    to_addr = _prompt_input(ctx, "Target address", required=True)
+    assert to_addr is not None
+    value_text = _prompt_input(ctx, "ETH value (default 0)", default="0", required=False) or "0"
+    calldata = _prompt_input(ctx, "Calldata (0x…)", default="0x", required=False) or "0x"
+    op_choice = _prompt_choice(ctx, "Operation type", ["0", "1"], default="0") or "0"
+
+    try:
+        checksum_to = core.Web3.to_checksum_address(to_addr)
+    except ValueError as exc:  # pragma: no cover - validation guard
+        raise ValueError("Invalid target address") from exc
+
+    try:
+        value_wei = int(core.Web3.to_wei(core.Decimal(value_text), "ether"))
+    except Exception as exc:  # pragma: no cover - validation guard
+        raise ValueError("Invalid ETH amount") from exc
+
+    if calldata.lower() in {"", "0x"}:
+        data_bytes = b""
+    else:
+        try:
+            data_bytes = core.Web3.to_bytes(hexstr=calldata)
+        except Exception as exc:  # pragma: no cover - validation guard
+            raise ValueError("Invalid calldata hex") from exc
+
+    safe_ctx = getattr(core, "SAFE", None)
+    needed = getattr(safe_ctx, "threshold", 0) or 1
+    signatures: List[str] = []
+    for index in range(int(needed)):
+        sig = _prompt_input(ctx, f"Signature {index + 1}/{needed}", required=True)
+        assert sig is not None
+        signatures.append(sig)
+
+    return _run_legacy_callable(
+        core.safe_exec_tx,
+        args=[checksum_to, value_wei, data_bytes, int(op_choice)],
+        inputs=signatures,
+    )
+
+
+def _legacy_action_safe_add_owner(ctx: MenuContext) -> List[str]:
+    _ensure_safe_initialised(ctx)
+    owner = _prompt_input(ctx, "New owner address", required=True)
+    assert owner is not None
+    return _run_legacy_callable(core.safe_add_owner, inputs=[owner])
+
+
+def _legacy_action_safe_remove_owner(ctx: MenuContext) -> List[str]:
+    _ensure_safe_initialised(ctx)
+    target = _prompt_input(ctx, "Owner to remove", required=True)
+    previous = _prompt_input(ctx, "Previous owner (linked list)", required=True)
+    assert target is not None and previous is not None
+    return _run_legacy_callable(core.safe_remove_owner, inputs=[target, previous])
+
+
+def _legacy_action_safe_change_threshold(ctx: MenuContext) -> List[str]:
+    _ensure_safe_initialised(ctx)
+    threshold = _prompt_input(ctx, "New threshold (>0)", required=True)
+    assert threshold is not None
+    return _run_legacy_callable(core.safe_change_threshold, inputs=[threshold])
+
+
+def _legacy_action_safe_add_delegate(ctx: MenuContext) -> List[str]:
+    _ensure_safe_initialised(ctx)
+    owner = _prompt_input(ctx, "Owner address", required=True)
+    delegate = _prompt_input(ctx, "Delegate address", required=True)
+    assert owner is not None and delegate is not None
+    return _run_legacy_callable(core.safe_add_delegate, inputs=[owner, delegate])
+
+
+def _legacy_action_safe_remove_delegate(ctx: MenuContext) -> List[str]:
+    _ensure_safe_initialised(ctx)
+    owner = _prompt_input(ctx, "Owner address", required=True)
+    delegate = _prompt_input(ctx, "Delegate to remove", required=True)
+    assert owner is not None and delegate is not None
+    return _run_legacy_callable(core.safe_remove_delegate, inputs=[owner, delegate])
+
+
+def _legacy_action_safe_list_delegates(ctx: MenuContext) -> List[str]:
+    _ensure_safe_initialised(ctx)
+    return _run_legacy_callable(core.safe_list_delegates)
+
+
+def _legacy_action_safe_show_guard(ctx: MenuContext) -> List[str]:
+    _ensure_safe_initialised(ctx)
+    return _run_legacy_callable(core.safe_show_guard)
+
+
+def _legacy_action_safe_enable_guard(ctx: MenuContext) -> List[str]:
+    _ensure_safe_initialised(ctx)
+    guard_addr = _prompt_input(ctx, "DelayGuard address", required=True)
+    assert guard_addr is not None
+    return _run_legacy_callable(core.safe_toggle_guard, inputs=[guard_addr], args=[True])
+
+
+def _legacy_action_safe_disable_guard(ctx: MenuContext) -> List[str]:
+    _ensure_safe_initialised(ctx)
+    return _run_legacy_callable(core.safe_toggle_guard, args=[False])
 
 
 def _action_tx_simulate(ctx: MenuContext) -> List[str]:
@@ -855,6 +1192,72 @@ def _build_tx_menu(ctx: MenuContext) -> Sequence[MenuEntry]:
     return [
         ("Simulate Safe/DeFi plan", _action_tx_simulate),
         ("Queue execution payload", _action_tx_exec),
+        ("Back", None),
+    ]
+
+
+def _legacy_action_wallet_generate(ctx: MenuContext) -> List[str]:
+    return _run_legacy_callable(core.wal_generate_mnemonic)
+
+
+def _legacy_action_wallet_import(ctx: MenuContext) -> List[str]:
+    mnemonic = _prompt_secret(ctx, "Enter mnemonic", required=True)
+    assert mnemonic is not None
+    return _run_legacy_callable(core.wal_import_mnemonic, secrets=[mnemonic])
+
+
+def _legacy_action_wallet_passphrase(ctx: MenuContext) -> List[str]:
+    passphrase = _prompt_secret(ctx, "Passphrase (blank clears)", required=False) or ""
+    return _run_legacy_callable(core.wal_set_passphrase, secrets=[passphrase])
+
+
+def _legacy_action_wallet_preview(ctx: MenuContext) -> List[str]:
+    path = _prompt_input(ctx, "Derivation path", required=True)
+    assert path is not None
+    return _run_legacy_callable(core.wal_preview, inputs=[path])
+
+
+def _legacy_action_wallet_scan_default(ctx: MenuContext) -> List[str]:
+    count = _prompt_int(ctx, "How many accounts", default=5, minimum=1) or 5
+    return _run_legacy_callable(core.wal_scan, args=[count, False])
+
+
+def _legacy_action_wallet_scan_hidden(ctx: MenuContext) -> List[str]:
+    count = _prompt_int(ctx, "How many hidden accounts", default=5, minimum=1) or 5
+    return _run_legacy_callable(core.wal_scan, args=[count, True])
+
+
+def _legacy_action_wallet_derive(ctx: MenuContext) -> List[str]:
+    path = _prompt_input(ctx, "Path (e.g., m/44'/60'/0'/0/1)", required=True)
+    assert path is not None
+    address, _account = core.wal_derive(path)
+    if address:
+        return [f"{path} -> {address}"]
+    return [f"Failed to derive address for {path}"]
+
+
+def _legacy_action_wallet_export(ctx: MenuContext) -> List[str]:
+    return _run_legacy_callable(core.wal_export_discovered)
+
+
+def _legacy_action_wallet_label(ctx: MenuContext) -> List[str]:
+    address = _prompt_input(ctx, "Address to label", required=True)
+    label = _prompt_input(ctx, "Label", required=True)
+    assert address is not None and label is not None
+    return _run_legacy_callable(core.wal_label, inputs=[address, label])
+
+
+def _build_wallet_menu(ctx: MenuContext) -> Sequence[MenuEntry]:
+    return [
+        ("Generate mnemonic", _legacy_action_wallet_generate),
+        ("Import mnemonic", _legacy_action_wallet_import),
+        ("Set or clear passphrase", _legacy_action_wallet_passphrase),
+        ("Preview address (any path)", _legacy_action_wallet_preview),
+        ("Scan default accounts", _legacy_action_wallet_scan_default),
+        ("Scan hidden HD tree", _legacy_action_wallet_scan_hidden),
+        ("Derive specific path", _legacy_action_wallet_derive),
+        ("Export discovered addresses", _legacy_action_wallet_export),
+        ("Label address", _legacy_action_wallet_label),
         ("Back", None),
     ]
 
@@ -909,6 +1312,39 @@ def _build_secrets_menu(ctx: MenuContext) -> Sequence[MenuEntry]:
         ("Add secret", _action_secrets_add),
         ("Rotate secret", _action_secrets_rotate),
         ("Remove secret", _action_secrets_remove),
+        ("Back", None),
+    ]
+
+
+def _legacy_action_key_add(ctx: MenuContext) -> List[str]:
+    key = _prompt_input(ctx, "Secret key (e.g., RPC_URL)", required=True)
+    value = _prompt_secret(ctx, "Secret value", required=True)
+    assert key is not None and value is not None
+    return _run_legacy_callable(core.km_add, inputs=[key], secrets=[value])
+
+
+def _legacy_action_key_get(ctx: MenuContext) -> List[str]:
+    key = _prompt_input(ctx, "Secret key", required=True)
+    assert key is not None
+    return _run_legacy_callable(core.km_get, inputs=[key])
+
+
+def _legacy_action_key_delete(ctx: MenuContext) -> List[str]:
+    key = _prompt_input(ctx, "Secret key to delete", required=True)
+    assert key is not None
+    return _run_legacy_callable(core.km_del, inputs=[key])
+
+
+def _legacy_action_key_list(ctx: MenuContext) -> List[str]:
+    return _run_legacy_callable(core.km_list_keyring)
+
+
+def _build_key_manager_menu(ctx: MenuContext) -> Sequence[MenuEntry]:
+    return [
+        ("Add or update secret", _legacy_action_key_add),
+        ("Retrieve secret", _legacy_action_key_get),
+        ("Delete secret", _legacy_action_key_delete),
+        ("List keyring entries", _legacy_action_key_list),
         ("Back", None),
     ]
 
@@ -1168,6 +1604,10 @@ def _build_guard_menu(ctx: MenuContext) -> Sequence[MenuEntry]:
     ]
 
 
+def _legacy_action_about(ctx: MenuContext) -> List[str]:
+    return _run_legacy_callable(core.about_menu)
+
+
 def _show_safe_menu(ctx: MenuContext) -> None:
     _open_submenu(ctx, "Safe", _build_safe_menu)
 
@@ -1176,8 +1616,16 @@ def _show_tx_menu(ctx: MenuContext) -> None:
     _open_submenu(ctx, "Tx", _build_tx_menu)
 
 
+def _show_wallet_menu(ctx: MenuContext) -> None:
+    _open_submenu(ctx, "Wallet", _build_wallet_menu)
+
+
 def _show_secrets_menu(ctx: MenuContext) -> None:
     _open_submenu(ctx, "Secrets", _build_secrets_menu)
+
+
+def _show_key_manager_menu(ctx: MenuContext) -> None:
+    _open_submenu(ctx, "Key Manager", _build_key_manager_menu)
 
 
 def _show_sync_menu(ctx: MenuContext) -> None:
@@ -1208,10 +1656,74 @@ def _show_guard_menu(ctx: MenuContext) -> None:
     _open_submenu(ctx, "Guard", _build_guard_menu)
 
 
+def _show_about_menu(ctx: MenuContext) -> None:
+    ctx.stack.append("About")
+    ctx.current_menu = " › ".join(ctx.stack)
+    _menu_log("enter", menu=ctx.current_menu)
+
+    stdscr = ctx.stdscr
+    palette = ctx.palette
+    about_lines = _legacy_action_about(ctx)
+    exit_reason = "return"
+
+    try:
+        while True:
+            stdscr.erase()
+            height, width = stdscr.getmaxyx()
+
+            if height < MIN_HEIGHT or width < MIN_WIDTH:
+                _render_resize_hint(stdscr, palette)
+                key = stdscr.getch()
+                if key in QUIT_KEYS:
+                    exit_reason = "quit"
+                    break
+                if key == curses.KEY_RESIZE:
+                    continue
+                continue
+
+            row = 0
+            for idx, line in enumerate(LEGACY_BANNER_LINES):
+                attr = palette["title"] if idx < 6 else palette["subtitle"]
+                col = max(0, (width - len(line)) // 2)
+                _safe_addstr(stdscr, row, col, line, attr)
+                row += 1
+
+            row += 1
+            text_width = max(0, width - 4)
+            for line in about_lines:
+                for wrapped in _wrap_text(line, text_width):
+                    if row >= height - 3:
+                        break
+                    _safe_addstr(stdscr, row, 2, wrapped, palette["detail_text"])
+                    row += 1
+                if row >= height - 3:
+                    break
+
+            footer = "Press Enter or Q to return"
+            footer_col = max(0, (width - len(footer)) // 2)
+            _safe_addstr(stdscr, height - 2, footer_col, footer, palette["footer"])
+
+            stdscr.refresh()
+            key = stdscr.getch()
+            if key in QUIT_KEYS:
+                exit_reason = "quit"
+                break
+            if key in ENTER_KEYS:
+                break
+            if key == curses.KEY_RESIZE:
+                continue
+    finally:
+        _menu_log("exit", menu=ctx.current_menu, reason=exit_reason)
+        ctx.stack.pop()
+        ctx.current_menu = " › ".join(ctx.stack)
+
+
 SUBMENU_DISPATCH: Dict[str, Callable[[MenuContext], None]] = {
     "Safe": _show_safe_menu,
     "Tx": _show_tx_menu,
+    "Wallet": _show_wallet_menu,
     "Secrets": _show_secrets_menu,
+    "Key Manager": _show_key_manager_menu,
     "Sync": _show_sync_menu,
     "Audit": _show_audit_menu,
     "Graph": _show_graph_menu,
@@ -1219,13 +1731,12 @@ SUBMENU_DISPATCH: Dict[str, Callable[[MenuContext], None]] = {
     "Rescue": _show_rescue_menu,
     "Plugins": _show_plugins_menu,
     "Guard": _show_guard_menu,
+    "About": _show_about_menu,
 }
 
 
 def launch_tui() -> None:
     """Launch the GNOMAN mission control curses interface."""
-
-    exit_request: Dict[str, str] = {"mode": "quit"}
 
     def main(stdscr: "curses._CursesWindow") -> None:
         try:
@@ -1263,7 +1774,9 @@ def launch_tui() -> None:
             palette["footer"] = curses.color_pair(2) | curses.A_DIM
 
         context = MenuContext(stdscr=stdscr, palette=palette)
-        exit_request["mode"] = "quit"
+
+        if not _render_banner_screen(stdscr, palette):
+            return
 
         selected = 0
         while True:
@@ -1271,7 +1784,6 @@ def launch_tui() -> None:
             key = stdscr.getch()
 
             if key in QUIT_KEYS:
-                exit_request["mode"] = "quit"
                 break
             if key == curses.KEY_RESIZE:
                 continue
@@ -1285,10 +1797,6 @@ def launch_tui() -> None:
 
             if key in ENTER_KEYS:
                 item = MENU_ITEMS[selected]
-                if item.get("mode") == "legacy":
-                    exit_request["mode"] = "legacy"
-                    _menu_log("legacy_launch", menu=item.get("title"))
-                    break
                 handler = SUBMENU_DISPATCH.get(str(item.get("title")))
                 if handler is not None:
                     context.stdscr = stdscr
@@ -1305,12 +1813,4 @@ def launch_tui() -> None:
             elif key in {curses.KEY_UP, curses.KEY_LEFT, getattr(curses, "KEY_BTAB", 353)}:
                 selected = (selected - 1) % len(MENU_ITEMS)
 
-    while True:
-        curses.wrapper(main)
-        mode = exit_request.get("mode", "quit")
-        if mode == "legacy":
-            print("\nLaunching GNOMAN legacy console. Select 'Exit' to return to Mission Control.\n")
-            core.run_console(shutdown_logging=False)
-            print("\n⬅ Returning to Mission Control dashboard...\n")
-            continue
-        break
+    curses.wrapper(main)
