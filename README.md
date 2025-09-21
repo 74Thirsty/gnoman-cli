@@ -14,7 +14,7 @@ commands, a curses dashboard, and structured forensic logging so every Safe inte
 
 ## Mission Control CLI
 
-GNOMAN v0.2.0 introduces an argparse-powered command surface. Launch it with:
+GNOMAN v0.3.0 expands the argparse-powered surface with sync, graphing, autopilot, and incident recovery workflows. Launch it with:
 
 ```bash
 python -m gnoman --help
@@ -32,7 +32,7 @@ gnoman safe status <SAFE_ADDR>
 ### Transaction operations
 
 ```bash
-gnoman tx simulate <proposal-id>
+gnoman tx simulate [<proposal-id>] [--plan path.json] [--trace] [--ml-off]
 gnoman tx exec <proposal-id>
 ```
 
@@ -45,12 +45,44 @@ gnoman secrets rotate <KEY>
 gnoman secrets rm <KEY>
 ```
 
+### Cross-environment sync
+
+```bash
+gnoman sync [--force | --reconcile]
+```
+Synchronise keyring, `.env`, `.env.secure`, and remote vault entries. Drift can be resolved interactively or forced to the AES priority order.
+
+### Simulation and autopilot
+
+```bash
+gnoman tx simulate ...
+gnoman autopilot [--dry-run | --execute | --alerts-only] [--plan plan.json]
+```
+The autopilot pipeline fetches loans, builds trades, validates with ML, prepares Safe payloads, simulates on an Anvil fork, and queues, alerts, or executes depending on flags.
+
 ### Forensics and monitoring
 
 ```bash
 gnoman audit
-gnoman guard
+gnoman guard --cycles 5
 ```
+`gnoman audit` produces a signed JSON+PDF snapshot in `~/.gnoman/audits/`. `gnoman guard` runs the System Guardian daemon to check secrets, balances, quorum, gas, and arbitrage opportunities, dispatching alerts to Discord/Slack/PagerDuty.
+
+### Graph visualisation
+
+```bash
+gnoman graph view [--format svg|png|html] [--output custom/path]
+```
+Renders AES GraphManager output with neon-highlighted profitable routes. Assets are stored in `~/.gnoman/graphs/` by default.
+
+### Incident recovery
+
+```bash
+gnoman rescue safe <SAFE_ADDR>
+gnoman rotate all
+gnoman freeze <wallet|safe> <id> [--reason text]
+```
+Recovery tooling walks operators through Safe quorum loss, rotates all wallets/owners, and freezes compromised entities until an explicit unfreeze event.
 
 ### Plugin management
 
@@ -58,15 +90,14 @@ gnoman guard
 gnoman plugin list
 gnoman plugin add <name>
 gnoman plugin remove <name>
+gnoman plugin swap <name> <version>
 ```
-
-Every command logs a JSON record to `~/.gnoman/gnoman.log` using a rotating file handler so follow-up tooling can
-process GNOMAN activity chronologically.
+Hot-swapping records schema validation and maintains a forensic history of plugin versions used by transactions.
 
 ## Terminal UI
 
 Running `python -m gnoman` with no subcommand launches the curses mission control surface. The scaffolded dashboard displays
-hotkeys for Safe, Tx, Secrets, Audit, Guard, and Plugin panels. Press any key to exit the placeholder view.
+hotkeys for Safe, Tx, Secrets, Sync, Audit, Graph, Autopilot, Rescue, Plugin, and Guard panels. Press any key to exit the placeholder view.
 
 ## Development
 
@@ -74,4 +105,4 @@ hotkeys for Safe, Tx, Secrets, Audit, Guard, and Plugin panels. Press any key to
 * Install dependencies with `pip install -e .`
 * Run `python -m gnoman safe --help` to view Safe-specific options.
 
-Structured logging is written to `~/.gnoman/gnoman.log`. Remove the file if you want a clean slate during development.
+Structured logging is written to `~/.gnoman/logs/gnoman.log`. Remove the file if you want a clean slate during development.
