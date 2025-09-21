@@ -13,14 +13,15 @@ authors = [
 license = { file = "LICENSE.md" }
 requires-python = ">=3.9"
 dependencies = [
-  "eth-account",
-  "web3>=6",
-  "eth-abi",
-  "pycryptodome; python_version<'3.11'",
-  "cryptography",
-  "keyring",
-  "python-dotenv",
-  "rich",
+  "eth-account>=0.9.0",
+  "web3>=6.0.0",
+  "eth-abi>=4.0.0",
+  "pycryptodome>=3.20.0; python_version<'3.11'",
+  "cryptography>=42.0.0",
+  "keyring>=24.0.0",
+  "python-dotenv>=1.0.1",
+  "rich>=13.0.0",
+  "pyyaml>=6.0.0",
 ]
 classifiers = [
   "Programming Language :: Python :: 3",
@@ -38,7 +39,7 @@ Issues = "https://github.com/74Thirsty/gnoman-cli/issues"
 gnoman = "gnoman.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["gnoman"]
+include = ["gnoman", "gnoman.*"]
 
 [tool.setuptools.package-data]
 gnoman = ["data/GnosisSafe.json"]
