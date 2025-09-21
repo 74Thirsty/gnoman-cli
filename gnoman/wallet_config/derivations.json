@@ -1,0 +1,6 @@
+{
+  "default": "m/44'/60'/0'/0/{index}",
+  "trading": "m/44'/60'/0'/1/{index}",
+  "vanity": "m/44'/60'/1337'/{index}",
+  "hidden": "m/44'/60'/1337'/42/{index}"
+}

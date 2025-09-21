@@ -42,5 +42,5 @@ gnoman = "gnoman.cli:main"
 include = ["gnoman", "gnoman.*"]
 
 [tool.setuptools.package-data]
-gnoman = ["data/GnosisSafe.json"]
+gnoman = ["data/GnosisSafe.json", "wallet_config/derivations.json"]
 

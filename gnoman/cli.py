@@ -17,6 +17,7 @@ from .commands import (
     secrets,
     sync,
     tx,
+    wallet,
 )
 from .tui import launch_tui
 
@@ -192,6 +193,46 @@ def build_parser() -> argparse.ArgumentParser:
     plugin_swap.add_argument("name", help="Plugin name to hot-swap")
     plugin_swap.add_argument("version", help="Target plugin version")
     plugin_swap.set_defaults(handler=plugin.swap)
+
+    # Wallet commands
+    wallet_parser = subparsers.add_parser("wallet", help="HD wallet management")
+    wallet_sub = wallet_parser.add_subparsers(dest="wallet_command")
+    wallet_sub.required = True
+
+    wallet_new = wallet_sub.add_parser("new", help="Derive a new account from the configured seed")
+    wallet_new.add_argument("--label", required=True, help="Label for the derived account")
+    wallet_new.add_argument(
+        "--path",
+        default="default",
+        help="Derivation path name or explicit template (defaults to 'default')",
+    )
+    wallet_new.set_defaults(handler=wallet.new)
+
+    wallet_list = wallet_sub.add_parser("list", help="List derived accounts")
+    wallet_list.set_defaults(handler=wallet.list_accounts)
+
+    wallet_vanity = wallet_sub.add_parser("vanity", help="Search for a vanity address")
+    wallet_vanity.add_argument("--prefix", help="Hex prefix to match (case-insensitive)")
+    wallet_vanity.add_argument("--suffix", help="Hex suffix to match (case-insensitive)")
+    wallet_vanity.add_argument("--regex", help="Regular expression to match against the address")
+    wallet_vanity.add_argument(
+        "--path",
+        default="vanity",
+        help="Derivation path name or template used during the search",
+    )
+    wallet_vanity.add_argument(
+        "--max-attempts",
+        type=int,
+        default=1_000_000,
+        help="Maximum attempts before aborting the vanity search",
+    )
+    wallet_vanity.add_argument(
+        "--log-every",
+        type=int,
+        default=5_000,
+        help="Emit a progress log every N attempts",
+    )
+    wallet_vanity.set_defaults(handler=wallet.vanity)
 
     return parser
 
