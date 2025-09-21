@@ -42,6 +42,9 @@ from web3 import Web3  # L036
 from web3.exceptions import ContractLogicError  # L037
 from eth_account import Account  # L038
 from eth_account.signers.local import LocalAccount  # L039
+
+from gnoman.utils.abi import load_safe_abi
+
 Account.enable_unaudited_hdwallet_features()  # L040
 
 # Minimal ERC20 ABI (symbol/decimals/transfer)  # L041
@@ -262,15 +265,18 @@ def safe_init() -> None:  # L256
         _set_secret("GNOSIS_SAFE", saddr)
     SAFE.addr = _cs(saddr)
 
-    abi_path = os.getenv("GNOSIS_SAFE_ABI", "./abi/GnosisSafe.json").strip()
-    with open(abi_path, "r") as f:
-        data = json.load(f)
-    abi = data["abi"] if isinstance(data, dict) and "abi" in data else data
+    abi, abi_source = load_safe_abi()
     SAFE.contract = w3.eth.contract(address=SAFE.addr, abi=abi)
 
     SAFE.owners = [_cs(o) for o in SAFE.contract.functions.getOwners().call()]
     SAFE.threshold = SAFE.contract.functions.getThreshold().call()
-    logger.info(f"🔧 SAFE initialized | address={SAFE.addr} | owners={len(SAFE.owners)} | threshold={SAFE.threshold}")
+    logger.info(
+        "🔧 SAFE initialized | address=%s | owners=%d | threshold=%d | abi_source=%s",
+        SAFE.addr,
+        len(SAFE.owners),
+        SAFE.threshold,
+        abi_source,
+    )
     audit_log("safe_init", {"safe": SAFE.addr, "owners": SAFE.owners, "threshold": SAFE.threshold}, True, {})
 # ───────── Delegate Registry (mapping owner->delegates) ─────────  # L301
 DELEGATE_FILE = Path("safe_delegates.json")  # L302

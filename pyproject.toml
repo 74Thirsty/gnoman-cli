@@ -37,3 +37,9 @@ Issues = "https://github.com/74Thirsty/gnoman-cli/issues"
 [project.scripts]
 gnoman = "gnoman.cli:main"
 
+[tool.setuptools.packages.find]
+include = ["gnoman"]
+
+[tool.setuptools.package-data]
+gnoman = ["data/GnosisSafe.json"]
+
