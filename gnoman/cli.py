@@ -11,9 +11,16 @@ from typing import Any, Callable, Dict, List, Optional
 from . import __version__
 from .abi import AbiManager
 from .audit import AuditService
+from .autopilot import AutopilotOrchestrator
 from .core import get_context, shutdown
+from .graph import GraphManager
+from .guard import GuardMonitor
+from .plugin import PluginRegistry
+from .rescue import RescueService
 from .safe import SafeManager, SafeTransaction
+from .secrets import SecretManager
 from .sync import SecretSyncer
+from .tx import TransactionService
 from .wallet import WalletService
 
 Handler = Callable[[argparse.Namespace], Any]
@@ -115,6 +122,122 @@ def build_parser() -> argparse.ArgumentParser:
     safe_exec.add_argument("--signature", action="append", dest="signatures", default=[], help="Signature hex string (repeatable)")
     safe_exec.add_argument("--signer-key", required=True, help="Secret key storing the executor private key")
     safe_exec.set_defaults(handler=handle_safe_exec)
+
+    # Transaction commands ------------------------------------------------
+    tx_parser = subparsers.add_parser("tx", help="Transaction simulation and execution")
+    tx_sub = tx_parser.add_subparsers(dest="tx_command", required=True)
+
+    tx_sim = tx_sub.add_parser("simulate", help="Simulate a Safe or DeFi plan")
+    tx_sim.add_argument("proposal_id", nargs="?", help="Proposal identifier to inspect")
+    tx_sim.add_argument("--plan", type=Path, help="Override plan JSON path")
+    tx_sim.add_argument("--trace", action="store_true", help="Emit diagnostic trace output")
+    tx_sim.add_argument("--ml-off", action="store_true", help="Skip ML scoring stages")
+    tx_sim.set_defaults(handler=handle_tx_simulate)
+
+    tx_exec = tx_sub.add_parser("exec", help="Execute a Safe proposal via autopilot")
+    tx_exec.add_argument("proposal_id", help="Proposal identifier")
+    tx_exec.add_argument("--plan", type=Path, help="Optional plan JSON path override")
+    tx_exec.set_defaults(handler=handle_tx_execute)
+
+    # Autopilot command ---------------------------------------------------
+    autopilot_parser = subparsers.add_parser("autopilot", help="Run the autopilot orchestration pipeline")
+    autopilot_parser.add_argument("--plan", type=Path, help="Path to plan JSON definition")
+    autopilot_parser.add_argument("--dry-run", action="store_true", help="Simulate only without state changes")
+    autopilot_parser.add_argument("--execute", action="store_true", help="Broadcast transactions when complete")
+    autopilot_parser.add_argument("--alerts-only", action="store_true", help="Skip execution and emit alerts only")
+    autopilot_parser.set_defaults(handler=handle_autopilot_run)
+
+    # Graph commands ------------------------------------------------------
+    graph_parser = subparsers.add_parser("graph", help="Render routing and ownership graphs")
+    graph_parser.add_argument("--format", choices=["svg", "html", "png"], default="svg", help="Output format")
+    graph_parser.add_argument("--output", type=Path, help="Optional output path or directory")
+    graph_parser.add_argument(
+        "--highlight",
+        action="append",
+        default=[],
+        help="Highlight an address, plugin, or label (repeatable)",
+    )
+    graph_parser.set_defaults(handler=handle_graph_render)
+
+    # Plugin commands -----------------------------------------------------
+    plugin_parser = subparsers.add_parser("plugin", help="Manage autopilot plugins")
+    plugin_sub = plugin_parser.add_subparsers(dest="plugin_command", required=True)
+
+    plugin_list = plugin_sub.add_parser("list", help="List registered plugins")
+    plugin_list.set_defaults(handler=handle_plugin_list)
+
+    plugin_add = plugin_sub.add_parser("add", help="Register a plugin")
+    plugin_add.add_argument("name", help="Plugin identifier")
+    plugin_add.add_argument("--version", required=True, help="Plugin version string")
+    plugin_add.add_argument("--schema", default="generic", help="Schema or interface identifier")
+    plugin_add.add_argument("--source", default="manual", help="Source of the plugin package")
+    plugin_add.set_defaults(handler=handle_plugin_add)
+
+    plugin_remove = plugin_sub.add_parser("remove", help="Remove a plugin")
+    plugin_remove.add_argument("name", help="Plugin identifier")
+    plugin_remove.set_defaults(handler=handle_plugin_remove)
+
+    plugin_swap = plugin_sub.add_parser("swap", help="Hot-swap plugin version")
+    plugin_swap.add_argument("name", help="Plugin identifier")
+    plugin_swap.add_argument("version", help="Target version")
+    plugin_swap.set_defaults(handler=handle_plugin_swap)
+
+    plugin_toggle = plugin_sub.add_parser("toggle", help="Enable or disable a plugin")
+    state = plugin_toggle.add_mutually_exclusive_group(required=True)
+    state.add_argument("--enable", dest="enabled", action="store_true", help="Enable the plugin")
+    state.add_argument("--disable", dest="enabled", action="store_false", help="Disable the plugin")
+    plugin_toggle.add_argument("name", help="Plugin identifier")
+    plugin_toggle.set_defaults(handler=handle_plugin_toggle)
+
+    # Rescue commands -----------------------------------------------------
+    rescue_parser = subparsers.add_parser("rescue", help="Incident response tooling")
+    rescue_sub = rescue_parser.add_subparsers(dest="rescue_command", required=True)
+
+    rescue_safe = rescue_sub.add_parser("safe", help="Generate a Safe rescue report")
+    rescue_safe.add_argument("--safe", help="Override Safe address to inspect")
+    rescue_safe.set_defaults(handler=handle_rescue_safe)
+
+    rescue_status = rescue_sub.add_parser("status", help="List frozen entities")
+    rescue_status.set_defaults(handler=handle_rescue_status)
+
+    # Rotate command ------------------------------------------------------
+    rotate_parser = subparsers.add_parser("rotate", help="Rotate Safe owners and executors")
+    rotate_sub = rotate_parser.add_subparsers(dest="rotate_command", required=True)
+    rotate_all = rotate_sub.add_parser("all", help="Rotate all tracked owners and wallets")
+    rotate_all.set_defaults(handler=handle_rotate_all)
+
+    # Freeze command ------------------------------------------------------
+    freeze_parser = subparsers.add_parser("freeze", help="Freeze a Safe, wallet, or plugin")
+    freeze_parser.add_argument("target_type", choices=["wallet", "safe", "plugin"], help="Entity type to freeze")
+    freeze_parser.add_argument("target_id", help="Entity identifier")
+    freeze_parser.add_argument("--reason", default="incident response", help="Reason for the freeze")
+    freeze_parser.set_defaults(handler=handle_freeze)
+
+    # Guard command -------------------------------------------------------
+    guard_parser = subparsers.add_parser("guard", help="Run the monitoring guard")
+    guard_parser.add_argument("--cycles", type=int, default=3, help="Number of polling cycles")
+    guard_parser.add_argument("--delay", type=float, default=0.5, help="Delay between cycles in seconds")
+    guard_parser.set_defaults(handler=handle_guard_run)
+
+    # Secrets (legacy) ----------------------------------------------------
+    secrets_parser = subparsers.add_parser("secrets", help="Direct secret management")
+    secrets_sub = secrets_parser.add_subparsers(dest="secrets_command", required=True)
+
+    secrets_list = secrets_sub.add_parser("list", help="List stored secrets")
+    secrets_list.set_defaults(handler=handle_secrets_list)
+
+    secrets_add = secrets_sub.add_parser("add", help="Store a secret value")
+    secrets_add.add_argument("key", help="Secret key")
+    secrets_add.add_argument("value", help="Secret value")
+    secrets_add.set_defaults(handler=handle_secrets_add)
+
+    secrets_rotate = secrets_sub.add_parser("rotate", help="Rotate a secret value")
+    secrets_rotate.add_argument("key", help="Secret key")
+    secrets_rotate.set_defaults(handler=handle_secrets_rotate)
+
+    secrets_remove = secrets_sub.add_parser("remove", help="Delete a secret")
+    secrets_remove.add_argument("key", help="Secret key")
+    secrets_remove.set_defaults(handler=handle_secrets_remove)
 
     # Wallet commands -----------------------------------------------------
     wallet_parser = subparsers.add_parser("wallet", help="Wallet management")
@@ -357,6 +480,146 @@ def handle_safe_exec(args: argparse.Namespace) -> Dict[str, Any]:
         refund_receiver=args.refund,
     )
     payload = manager.exec_safe_transaction(transaction, args.signatures, signer_key=args.signer_key)
+    print(json.dumps(payload, indent=2))
+    return payload
+
+
+# Extended command handlers -----------------------------------------------
+
+def handle_tx_simulate(args: argparse.Namespace) -> Dict[str, Any]:
+    service = TransactionService()
+    payload = service.simulate(
+        args.proposal_id,
+        plan_path=args.plan,
+        trace=args.trace,
+        ml_off=args.ml_off,
+    )
+    print(json.dumps(payload, indent=2))
+    return payload
+
+
+def handle_tx_execute(args: argparse.Namespace) -> Dict[str, Any]:
+    service = TransactionService()
+    payload = service.execute(args.proposal_id, plan_path=args.plan)
+    print(json.dumps(payload, indent=2))
+    return payload
+
+
+def handle_autopilot_run(args: argparse.Namespace) -> Dict[str, Any]:
+    orchestrator = AutopilotOrchestrator()
+    report = orchestrator.execute(
+        plan_path=args.plan,
+        dry_run=args.dry_run,
+        execute=args.execute,
+        alerts_only=args.alerts_only,
+    )
+    payload = report.serialise()
+    print(json.dumps(payload, indent=2))
+    return payload
+
+
+def handle_graph_render(args: argparse.Namespace) -> Dict[str, Any]:
+    manager = GraphManager()
+    payload = manager.render(args.format, output=args.output, highlight=args.highlight)
+    print(json.dumps(payload, indent=2))
+    return payload
+
+
+def handle_plugin_list(args: argparse.Namespace) -> Dict[str, Any]:
+    registry = PluginRegistry()
+    plugins = registry.list_plugins()
+    print(json.dumps(plugins, indent=2))
+    return {"plugins": plugins}
+
+
+def handle_plugin_add(args: argparse.Namespace) -> Dict[str, Any]:
+    registry = PluginRegistry()
+    payload = registry.add_plugin(args.name, args.version, args.schema, source=args.source)
+    print(json.dumps(payload, indent=2))
+    return payload
+
+
+def handle_plugin_remove(args: argparse.Namespace) -> Dict[str, Any]:
+    registry = PluginRegistry()
+    registry.remove_plugin(args.name)
+    payload = {"removed": args.name}
+    print(json.dumps(payload, indent=2))
+    return payload
+
+
+def handle_plugin_swap(args: argparse.Namespace) -> Dict[str, Any]:
+    registry = PluginRegistry()
+    payload = registry.swap(args.name, args.version)
+    print(json.dumps(payload, indent=2))
+    return payload
+
+
+def handle_plugin_toggle(args: argparse.Namespace) -> Dict[str, Any]:
+    registry = PluginRegistry()
+    payload = registry.toggle(args.name, enabled=args.enabled)
+    print(json.dumps(payload, indent=2))
+    return payload
+
+
+def handle_rescue_safe(args: argparse.Namespace) -> Dict[str, Any]:
+    service = RescueService()
+    payload = service.rescue_safe(args.safe)
+    print(json.dumps(payload, indent=2))
+    return payload
+
+
+def handle_rescue_status(args: argparse.Namespace) -> Dict[str, Any]:
+    service = RescueService()
+    records = service.frozen()
+    print(json.dumps(records, indent=2))
+    return {"frozen": records}
+
+
+def handle_rotate_all(args: argparse.Namespace) -> Dict[str, Any]:
+    service = RescueService()
+    payload = service.rotate_all()
+    print(json.dumps(payload, indent=2))
+    return payload
+
+
+def handle_freeze(args: argparse.Namespace) -> Dict[str, Any]:
+    service = RescueService()
+    payload = service.freeze(args.target_type, args.target_id, reason=args.reason)
+    print(json.dumps(payload, indent=2))
+    return payload
+
+
+def handle_guard_run(args: argparse.Namespace) -> Dict[str, Any]:
+    monitor = GuardMonitor()
+    records = monitor.run(cycles=args.cycles, delay=args.delay)
+    print(json.dumps(records, indent=2))
+    return {"cycles": records}
+
+
+def handle_secrets_list(args: argparse.Namespace) -> Dict[str, Any]:
+    manager = SecretManager()
+    records = manager.list()
+    print(json.dumps(records, indent=2))
+    return {"secrets": records}
+
+
+def handle_secrets_add(args: argparse.Namespace) -> Dict[str, Any]:
+    manager = SecretManager()
+    payload = manager.add(args.key, args.value)
+    print(json.dumps(payload, indent=2))
+    return payload
+
+
+def handle_secrets_rotate(args: argparse.Namespace) -> Dict[str, Any]:
+    manager = SecretManager()
+    payload = manager.rotate(args.key)
+    print(json.dumps(payload, indent=2))
+    return payload
+
+
+def handle_secrets_remove(args: argparse.Namespace) -> Dict[str, Any]:
+    manager = SecretManager()
+    payload = manager.remove(args.key)
     print(json.dumps(payload, indent=2))
     return payload
 
