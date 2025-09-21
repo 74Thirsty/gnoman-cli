@@ -111,8 +111,6 @@ def splash() -> None:  # L069
     logger.info("© 2025 Christopher Hirschauer — All Rights Reserved")  # L085
     logger.info("Licensed under GNOMAN License (see LICENSE.md)")  # L086
 
-splash()  # L088
-
 
 # ───────── Forensic Ledger (tamper-evident JSONL) ─────────  # L089
 AUDIT_FILE = Path("gnoman_audit.jsonl")  # L090
