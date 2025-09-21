@@ -15,26 +15,26 @@ ABI interaction leaves a permanent trace.
 
 ---
 
-## ✨ What’s New in v1.x
+## ✨ Mission control at a glance
 
-* **Safe lifecycle orchestration** &mdash; deploy, fund, propose, sign, execute, rotate owners, manage thresholds, and
-enforce 24&nbsp;hour holds and guard delegates directly from the CLI.
-* **HD wallet tooling** &mdash; derive accounts from labelled paths, surface hidden branches, rotate executors, export QR
-payloads, and search for vanity addresses without leaving GNOMAN.
-* **Autopilot + transaction simulation** &mdash; load plan JSON, reconcile plugin versions, run ML-enabled simulations, and
-optionally execute Safe transactions once guardrails are green.
-* **Incident response + guard rails** &mdash; run rescue flows, freeze compromised entities, monitor quorum and balance
-health, and dispatch alerts from the guard daemon.
-* **Secret management and sync** &mdash; keyring-first secret resolution with drift detection, reconciliation, and rotation
-across keyring, `.env`, and remote vault mirrors.
-* **Forensic audit reporting** &mdash; produce signed JSON (and optional PDF) dossiers of Safe state, wallet derivations,
-plugin history, and expiring secrets for compliance reviews.
-* **ABI orchestration and graphing** &mdash; load and validate ABI schemas, encode calldata, and export neon graph visual
-isations for plans, owners, and liquidity routes.
+* **Safe lifecycle orchestration** &mdash; deploy, fund, execute, rotate owners, manage guard delegates, and enforce
+  24&nbsp;hour holds directly from the CLI.
+* **Wallet and key management** &mdash; derive HD trees, reveal hidden branches, label and export accounts, rotate
+  executors, and chase vanity patterns without leaving the terminal.
+* **Autopilot + simulation** &mdash; reconcile plugin versions, load plan JSON, run ML-enabled simulations, and execute
+  proposals once guardrails are satisfied.
+* **Incident response** &mdash; rescue compromised Safes, freeze entities, rotate quorums, and monitor balances and
+  quorum health with the guard daemon.
+* **Secret management** &mdash; keyring-first resolution, drift detection, reconciliation, and rotation across keyring,
+  `.env`, and remote vault mirrors.
+* **Forensic reporting** &mdash; signed JSON (and optional PDF) dossiers of Safe state, wallet derivations, plugin
+  history, and expiring secrets for compliance.
+* **ABI and graph tooling** &mdash; inspect bundled schemas, validate overrides, encode calldata, and export neon graph
+  visualisations for routes, owners, and plan flows.
 
 ---
 
-## 🚀 Mission Control CLI
+## 🚀 Mission control CLI
 
 Launch the CLI with:
 
@@ -47,28 +47,24 @@ python -m gnoman --help
 ```bash
 gnoman safe info
 gnoman safe fund <ETH> --signer-key EXECUTOR_KEY
+gnoman safe erc20 <TOKEN> <AMOUNT> --signer-key EXECUTOR_KEY
 gnoman safe add-owner <ADDRESS> --signer-key EXECUTOR_KEY
 gnoman safe remove-owner <ADDRESS> <PREVIOUS> --signer-key EXECUTOR_KEY
 gnoman safe threshold <VALUE> --signer-key EXECUTOR_KEY
+gnoman safe guard show
 gnoman safe guard set <DELAY_GUARD> --signer-key EXECUTOR_KEY
-gnoman safe delegate add <OWNER> <DELEGATE>
+gnoman safe guard clear --signer-key EXECUTOR_KEY
+gnoman safe delegate list|add <OWNER> <DELEGATE>|remove <OWNER> <DELEGATE>
 gnoman safe hold list
-```
-
-### Wallet operations
-
-```bash
-gnoman wallet mnemonic generate
-gnoman wallet new <LABEL> [--path template]
-gnoman wallet list [--hidden]
-gnoman wallet vanity --prefix 0xabc --max-attempts 100000
-gnoman rotate all
+gnoman safe hold release <SAFE:NONCE>
+gnoman safe tx-hash --to <ADDR> --data <0x...>
+gnoman safe exec --to <ADDR> --data <0x...> --signature <SIG> --signer-key EXECUTOR_KEY
 ```
 
 ### Transaction simulation & autopilot
 
 ```bash
-gnoman tx simulate <proposal-id> [--plan plan.json] [--trace] [--ml-off]
+gnoman tx simulate [<proposal-id>] [--plan plan.json] [--trace] [--ml-off]
 gnoman tx exec <proposal-id> [--plan plan.json]
 gnoman autopilot [--dry-run | --execute | --alerts-only] [--plan plan.json]
 ```
@@ -77,32 +73,56 @@ gnoman autopilot [--dry-run | --execute | --alerts-only] [--plan plan.json]
 
 ```bash
 gnoman rescue safe [--safe <SAFE_ADDR>]
+gnoman rescue status
+gnoman rotate all
 gnoman freeze <wallet|safe|plugin> <id> [--reason text]
-gnoman guard [--cycles 5]
+gnoman guard [--cycles 5] [--delay 0.5]
 ```
 
 ### Plugin registry & graph exports
 
 ```bash
 gnoman plugin list
-gnoman plugin add <name> --version <semver>
+gnoman plugin add <name> --version <semver> [--schema generic]
+gnoman plugin remove <name>
 gnoman plugin swap <name> <version>
-gnoman graph --format svg --output ~/.gnoman/graphs/
+gnoman plugin toggle <name> --enable|--disable
+gnoman graph --format svg --output ~/.gnoman/graphs/ [--highlight ADDRESS]
+```
+
+### Wallet operations
+
+```bash
+gnoman wallet mnemonic generate
+gnoman wallet mnemonic import "word list"
+gnoman wallet passphrase set <PASSPHRASE>
+gnoman wallet passphrase clear
+gnoman wallet accounts
+gnoman wallet new <LABEL> [--path template]
+gnoman wallet scan [--count 10] [--hidden]
+gnoman wallet derive <PATH | template>
+gnoman wallet vanity [--prefix 0xabc] [--suffix ff] [--regex pattern] [--max-attempts 100000]
+gnoman wallet label <ADDRESS> <LABEL>
+gnoman wallet export [--output exported_accounts.json]
 ```
 
 ### Secrets & sync
 
 ```bash
+gnoman sync status
+gnoman sync drift
+gnoman sync force
+gnoman sync apply <KEY> <keyring|env>
+gnoman sync set <KEY> <VALUE>
+gnoman sync rotate <KEY>
+gnoman sync remove <KEY>
+
 gnoman secrets list
 gnoman secrets add <KEY> <VALUE>
 gnoman secrets rotate <KEY>
 gnoman secrets remove <KEY>
-
-gnoman sync status
-gnoman sync drift
-gnoman sync force
-gnoman sync rotate <KEY>
 ```
+
 Secrets resolve **keyring-first**, fall back to `.env`, and never read from `.env.secure`. Drift detection highlights
 mismatches before reconciliation and every action is logged to the forensic ledger.
 
@@ -111,11 +131,13 @@ mismatches before reconciliation and every action is logged to the forensic ledg
 ```bash
 gnoman audit
 gnoman abi show
-gnoman abi encode execTransaction --args '["0xdead...",0,"0x",0]'
+gnoman abi validate path/to/abi.json
+gnoman abi encode execTransaction --args '["0xdead...",0,"0x",0]' [--address <SAFE_ADDR>]
 ```
+
 `gnoman audit` generates a signed JSON report covering Safe configuration, derived wallets, plugin state, and secret
-metadata in `~/.gnoman/audits/`. ABI helpers inspect bundled and custom ABIs to enforce calldata integrity when building
-Safe transactions.
+metadata in `~/.gnoman/audits/`. ABI helpers inspect bundled and custom ABIs to enforce calldata integrity when
+building Safe transactions.
 
 ---
 
