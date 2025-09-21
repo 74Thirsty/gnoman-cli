@@ -121,7 +121,7 @@ Navigate with arrow keys. q to quit.
 
 🧑‍💻 **Authors**
 
-Built with obsession by Christopher Hirschauer (74Thirsty).
+Built with obsession by Christopher Hirschauer (</gadget_saavy>).
 
 ⸻
 
