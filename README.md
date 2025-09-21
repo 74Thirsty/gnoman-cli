@@ -1,4 +1,6 @@
 # GNOMAN: Guardian of Safes, Master of Keys
+![Sheen Banner](https://raw.githubusercontent.com/74Thirsty/74Thirsty/main/assets/gnoman2.svg)
+
 
 ✨ **What is GNOMAN?**
 
