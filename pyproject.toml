@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gnoman-cli"
-version = "0.1.3"
-description = "Your short one-line summary here"
+version = "0.2.0"
+description = "GNOMAN mission control CLI for Safes, secrets, and guard rails"
 readme = "README.md"
 authors = [
   { name = "Christopher Hirschauer", email = "c.hirschauer@gmail.com" }

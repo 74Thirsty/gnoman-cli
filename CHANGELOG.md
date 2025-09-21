@@ -5,6 +5,20 @@ This project follows [Semantic Versioning](https://semver.org/) rules.
 
 ---
 
+## [0.2.0] — 2025-09-20
+
+### Added
+
+* Mission-control style CLI with argparse subcommands for safes, secrets, guard, and plugins.
+* Rotating forensic logger that emits structured JSON lines to `~/.gnoman/gnoman.log`.
+* Curses-based interactive dashboard scaffolding covering safes, secrets, simulations, and plugins.
+
+### Changed
+
+* Default CLI launch opens the curses TUI when no subcommand is supplied.
+
+---
+
 ## \[0.1.4] — 2025-09-06
 
 ### Changed
