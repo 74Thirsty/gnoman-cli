@@ -45,6 +45,7 @@ from eth_account.signers.local import LocalAccount  # L039
 
 try:  # pragma: no branch - import resolution is environment-dependent.
     from .utils.abi import load_safe_abi
+    from .utils import keyring_index
 except ImportError:
     _pkg_root = Path(__file__).resolve().parent
     _project_root = _pkg_root.parent
@@ -54,8 +55,10 @@ except ImportError:
             sys.path.insert(0, candidate_str)
     try:
         from gnoman.utils.abi import load_safe_abi
+        from gnoman.utils import keyring_index
     except ImportError:
         from utils.abi import load_safe_abi  # type: ignore[import]
+        import keyring_index  # type: ignore[import]
 
 Account.enable_unaudited_hdwallet_features()  # L040
 
@@ -631,18 +634,22 @@ def wal_label() -> None:  # L713
 # ───────── Key Manager ─────────  # L730
 def km_add() -> None:
     key = input("Secret key (e.g., RPC_URL): ").strip()
-    if not key: 
-        print("Empty."); 
+    if not key:
+        print("Empty.");
         return
     val = getpass.getpass(f"Enter value for {key}: ").strip()
-    if not val: 
-        print("Empty."); 
+    if not val:
+        print("Empty.");
         return
+    stored = False
     if keyring:
-        try: 
+        try:
             keyring.set_password(_service_name(), key, val)
-        except Exception as e: 
+            stored = True
+        except Exception as e:
             logger.error(f"keyring set: {e}", exc_info=True)
+    if stored:
+        keyring_index.register_key(keyring, _service_name(), key)
     print("✅ Stored in keyring")
     audit_log("km_set", {"key": key}, True, {})
 
@@ -665,14 +672,16 @@ def km_get() -> None:
 
 def km_del() -> None:
     key = input("Secret key to delete: ").strip()
-    if not key: 
+    if not key:
         return
     ok = True
     if keyring:
-        try: 
+        try:
             keyring.delete_password(_service_name(), key)
-        except Exception: 
+        except Exception:
             ok = False
+        else:
+            keyring_index.unregister_key(keyring, _service_name(), key)
     print("✅ Deleted from keyring (if present).")
     audit_log("km_del", {"key": key}, ok, {})
 
@@ -683,16 +692,13 @@ def km_list_keyring() -> None:  # L780
     service = _service_name()
     print(f"=== keyring entries for service {service} ===")
     try:
-        # WARNING: some backends cannot enumerate; handle gracefully
-        keys = []
-        try:
-            keys = keyring.get_credential(service, None)  # type: ignore
-        except Exception:
-            pass
+        keys = keyring_index.list_keys(keyring, service)
         if not keys:
-            print("No entries visible (backend may not support listing).")
-        else:
-            print(keys)
+            print("No entries tracked yet. Add or re-save secrets to index them.")
+            return
+        print(f"Found {len(keys)} entr{'y' if len(keys) == 1 else 'ies'}:")
+        for key_name in keys:
+            print(f"  • {key_name}")
     except Exception as e:
         logger.error(f"km_list_keyring failed: {e}", exc_info=True)
         print("❌ Failed to list keyring.")

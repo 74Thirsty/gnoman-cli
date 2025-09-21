@@ -3,25 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, Protocol
+from typing import Optional
 
 try:  # pragma: no cover - depends on runtime environment
     import keyring  # type: ignore
 except Exception:  # pragma: no cover - if keyring is unavailable
     keyring = None  # type: ignore
 
-
-class KeyringLike(Protocol):
-    """Protocol describing the subset of keyring used by the wallet."""
-
-    def get_password(self, service: str, key: str) -> Optional[str]:
-        ...
-
-    def set_password(self, service: str, key: str, value: str) -> None:
-        ...
-
-    def delete_password(self, service: str, key: str) -> None:
-        ...
+from ..utils import keyring_index
+from ..utils.keyring_index import KeyringLike
 
 
 class WalletSeedError(RuntimeError):
@@ -68,6 +58,7 @@ class WalletSeedManager:
             self.backend.set_password(self.service_name, key, value)
         except Exception as exc:  # pragma: no cover - backend specific
             raise WalletSeedError(f"failed to store {key!r} in keyring") from exc
+        keyring_index.register_key(self.backend, self.service_name, key)
 
     def _delete(self, key: str) -> None:
         assert self.backend is not None
@@ -75,6 +66,7 @@ class WalletSeedManager:
             self.backend.delete_password(self.service_name, key)
         except Exception:  # pragma: no cover - deletion failures are non fatal
             return
+        keyring_index.unregister_key(self.backend, self.service_name, key)
 
     # -- mnemonic / entropy management ------------------------------------
     def store_mnemonic(self, mnemonic: str) -> None:
