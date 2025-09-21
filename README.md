@@ -131,7 +131,7 @@ If you appreciate the work behind GNOMAN, feel free to **donate** to support the
 
 #### PayPal:
 
-[Donate via PayPal](https://www.paypal.me/yourusername)
+[Donate via PayPal](https://www.paypal.me/obeymythirst)
 
 #### Gnosis Safe:
 
