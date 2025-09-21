@@ -40,7 +40,7 @@ This project follows [Semantic Versioning](https://semver.org/) rules.
 
 ### Changed
 
-* **Critical update:** `abi/GnosisSafe.json` (Safe v1.3.0 ABI) is now required.
+* **Critical update:** `gnoman/data/GnosisSafe.json` (Safe v1.3.0 ABI) is now bundled.
 * Fixed Safe initialization: methods `getOwners`, `getThreshold`, and `getGuard` now resolve correctly.
 * Improved ABI path resolution to work regardless of script location.
 
