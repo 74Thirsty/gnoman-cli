@@ -9,13 +9,13 @@ This project follows [Semantic Versioning](https://semver.org/) rules.
 
 ### Added
 
-* Mission-control style CLI with argparse subcommands for safes, secrets, guard, and plugins.
-* Rotating forensic logger that emits structured JSON lines to `~/.gnoman/gnoman.log`.
-* Curses-based interactive dashboard scaffolding covering safes, secrets, simulations, and plugins.
+* Argparse-powered mission control CLI with `safe`, `tx`, `secrets`, `audit`, `guard`, and `plugin` command groups.
+* Stub handlers that emit structured dicts and JSON log lines via the rotating logbook at `~/.gnoman/gnoman.log`.
+* Curses mission control TUI scaffold launched by default when no subcommand is supplied.
 
 ### Changed
 
-* Default CLI launch opens the curses TUI when no subcommand is supplied.
+* `python -m gnoman` now opens the TUI unless a subcommand is provided.
 
 ---
 
