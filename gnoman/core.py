@@ -43,7 +43,11 @@ from web3.exceptions import ContractLogicError  # L037
 from eth_account import Account  # L038
 from eth_account.signers.local import LocalAccount  # L039
 
-from .utils.abi import load_safe_abi
+if __package__ in (None, ""):
+    sys.path.append(str(Path(__file__).resolve().parent.parent))
+    from gnoman.utils.abi import load_safe_abi
+else:
+    from .utils.abi import load_safe_abi
 
 Account.enable_unaudited_hdwallet_features()  # L040
 
