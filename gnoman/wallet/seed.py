@@ -5,13 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
-try:  # pragma: no cover - depends on runtime environment
-    import keyring  # type: ignore
-except Exception:  # pragma: no cover - if keyring is unavailable
-    keyring = None  # type: ignore
-
 from ..utils import keyring_index
 from ..utils.keyring_index import KeyringLike
+from ..utils.keyring_compat import load_keyring_backend
 
 
 class WalletSeedError(RuntimeError):
@@ -40,9 +36,10 @@ class WalletSeedManager:
 
     def __post_init__(self) -> None:
         if self.backend is None:
-            if keyring is None:
+            backend = load_keyring_backend()
+            if backend is None:
                 raise WalletSeedError("keyring backend is not available")
-            self.backend = keyring  # type: ignore[assignment]
+            self.backend = backend
 
     # -- internal helpers -------------------------------------------------
     def _get(self, key: str) -> Optional[str]:
