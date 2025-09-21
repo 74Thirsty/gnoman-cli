@@ -863,7 +863,27 @@ def _open_submenu(ctx: MenuContext, title: str, builder: MenuBuilder) -> None:
 def _run_menu(ctx: MenuContext, title: str, items: Sequence[MenuEntry]) -> None:
     """Execute a submenu interaction loop for ``items``."""
 
-    ctx.stack.append(title)
+    previous_stack = ctx.stack.copy()
+    segments = [segment.strip() for segment in title.split("›") if segment.strip()]
+    if not segments:
+        cleaned = title.strip()
+        segments = [cleaned] if cleaned else [title]
+
+    if "›" in title:
+        prefix = 0
+        while prefix < len(segments) and prefix < len(previous_stack) and previous_stack[prefix] == segments[prefix]:
+            prefix += 1
+        new_stack = previous_stack[:prefix] + segments[prefix:]
+    else:
+        new_stack = previous_stack.copy()
+        for segment in segments:
+            if not new_stack or new_stack[-1] != segment:
+                new_stack.append(segment)
+
+    if not new_stack:
+        new_stack = segments
+
+    ctx.stack = new_stack
     ctx.current_menu = " › ".join(ctx.stack)
     _menu_log("enter", menu=ctx.current_menu)
     selected = 0
@@ -926,7 +946,7 @@ def _run_menu(ctx: MenuContext, title: str, items: Sequence[MenuEntry]) -> None:
     finally:
         path = ctx.current_menu
         _menu_log("exit", menu=path, reason=exit_reason)
-        ctx.stack.pop()
+        ctx.stack = previous_stack
         ctx.current_menu = " › ".join(ctx.stack)
 
 
