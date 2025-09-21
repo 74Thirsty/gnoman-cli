@@ -13,7 +13,7 @@ This project follows [Semantic Versioning](https://semver.org/) rules.
 * Forensic audit pipeline producing signed JSON/PDF snapshots under `~/.gnoman/audits/`.
 * Transaction simulator upgrades with local fork tracing, ML toggles, and plugin-aware autopilot orchestration.
 * Incident recovery suite: `gnoman rescue safe`, `gnoman rotate all`, and `gnoman freeze` controls.
-* AES integrations for graph rendering, plugin hot-swap, and system guardian monitoring with alert fan-out.
+* Restored the original menu-driven Safe, Wallet, and Key Manager features within the packaged CLI.
 
 ### Changed
 
