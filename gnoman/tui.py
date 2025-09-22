@@ -574,9 +574,12 @@ def _render_submenu(
     status_y = menu_start + total + 1
     bottom_limit = height - 5
     status_width = max(0, width - 8)
-    if status_y <= bottom_limit and status_width > 0:
-        _clear_region(stdscr, status_y, 4, max(0, bottom_limit - status_y + 1), status_width)
-        if status_lines:
+    if status_width > 0 and bottom_limit >= 0:
+        clear_top = min(status_y, bottom_limit)
+        clear_height = max(0, bottom_limit - clear_top + 1)
+        if clear_height > 0:
+            _clear_region(stdscr, clear_top, 4, clear_height, status_width)
+        if status_lines and status_y <= bottom_limit:
             _safe_addstr(stdscr, status_y, 4, "Last action:", palette["detail_heading"])
             status_y += 1
             for line in status_lines:
