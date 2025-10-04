@@ -6,7 +6,7 @@ import curses
 import io
 from contextlib import contextmanager, redirect_stdout
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from textwrap import wrap
 from types import ModuleType, SimpleNamespace
 from typing import TYPE_CHECKING, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
@@ -279,7 +279,7 @@ def _serialize(value: object) -> object:
 def _menu_log(action: str, **fields: object) -> None:
     """Emit a forensic menu log entry with ``action`` and ``fields``."""
 
-    timestamp = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    timestamp = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
     payload = {key: _serialize(value) for key, value in fields.items()}
     details = " ".join(f"{key}={payload[key]}" for key in sorted(payload))
     message = f"[GNOMAN.Menu] {action}"
