@@ -35,18 +35,16 @@ MenuCallback = Callable[["MenuContext"], Optional[Sequence[str]]]
 MenuEntry = Tuple[str, Optional[MenuCallback]]
 MenuBuilder = Callable[["MenuContext"], Sequence[MenuEntry]]
 
-LEGACY_BANNER_LINES: Tuple[str, ...] = (
-    " ██████╗ ███╗   ██╗ ██████╗ ███╗   ███╗ █████╗ ███╗   ██╗",
-    "██╔════╝ ████╗  ██║██╔═══██╗████╗ ████║██╔══██╗████╗  █║",
-    "██║  ███╗██╔██╗ ██║██║   ██║██╔████╔██║███████║██╔██╗ ██║",
-    "██║   ██║██║╚██╗██║██║   ██║██║╚██╔╝██║██╔══██║██║╚██╗██║",
-    "╚██████╔╝██║ ╚████║╚██████╔╝██║ ╚═╝ ██║██║  ██║██║ ╚████║",
-    " ╚═════╝ ╚═╝  ╚═══╝ ╚═════╝ ╚═╝     ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝",
-    "",
-    "        GNOMAN — Safe • Wallet • Keys • Hold24h",
-    "        © 2025 Christopher Hirschauer — All Rights Reserved",
-    "        Licensed under GNOMAN License (see LICENSE.md)",
-    "───────────────────────────────────────────────────────────",
+WELCOME_CARD_LINES: Tuple[str, ...] = (
+    "╭──────────────────────────────────────────────╮",
+    "│             GNOMAN Mission Control           │",
+    "│  Secure operations for Safe treasury teams   │",
+    "╰──────────────────────────────────────────────╯",
+)
+
+WELCOME_CARD_DETAIL: Tuple[str, ...] = (
+    "Modern mission control for signatures, wallets, and recovery.",
+    "All interactions remain logged for forensic traceability.",
 )
 
 MENU_ITEMS: List[MenuItem] = [
@@ -369,13 +367,19 @@ def _render_resize_hint(stdscr: "curses._CursesWindow", palette: Dict[str, int])
 
 
 def _render_banner_screen(stdscr: "curses._CursesWindow", palette: Dict[str, int]) -> bool:
-    """Display the legacy ASCII banner and wait for a key press."""
+    """Display an updated welcome card and wait for a key press."""
 
     while True:
         stdscr.erase()
         height, width = stdscr.getmaxyx()
 
-        min_height = max(MIN_HEIGHT, len(LEGACY_BANNER_LINES) + 4)
+        header_attr = palette.get("header", palette.get("title", 0))
+        title_attr = palette.get("title", 0)
+        subtitle_attr = palette.get("subtitle", title_attr)
+        footer_attr = palette.get("footer", subtitle_attr)
+
+        content_height = len(WELCOME_CARD_LINES) + len(WELCOME_CARD_DETAIL) + 4
+        min_height = max(MIN_HEIGHT, content_height)
         if height < min_height or width < MIN_WIDTH:
             _render_resize_hint(stdscr, palette)
             key = stdscr.getch()
@@ -385,15 +389,21 @@ def _render_banner_screen(stdscr: "curses._CursesWindow", palette: Dict[str, int
                 continue
             continue
 
-        for idx, line in enumerate(LEGACY_BANNER_LINES):
-            attr = palette["title"] if idx < 6 else palette["subtitle"]
+        top_row = max(0, (height - content_height) // 2)
+        for idx, line in enumerate(WELCOME_CARD_LINES):
+            attr = header_attr if idx in {0, len(WELCOME_CARD_LINES) - 1} else title_attr
             col = max(0, (width - len(line)) // 2)
-            _safe_addstr(stdscr, idx, col, line, attr)
+            _safe_addstr(stdscr, top_row + idx, col, line, attr)
+
+        detail_row = top_row + len(WELCOME_CARD_LINES) + 1
+        for line in WELCOME_CARD_DETAIL:
+            col = max(0, (width - len(line)) // 2)
+            _safe_addstr(stdscr, detail_row, col, line, subtitle_attr)
+            detail_row += 1
 
         prompt = "Press any key to enter Mission Control"
-        prompt_row = len(LEGACY_BANNER_LINES) + 1
         prompt_col = max(0, (width - len(prompt)) // 2)
-        _safe_addstr(stdscr, prompt_row, prompt_col, prompt, palette["footer"])
+        _safe_addstr(stdscr, detail_row + 1, prompt_col, prompt, footer_attr)
         stdscr.refresh()
 
         key = stdscr.getch()
@@ -417,6 +427,10 @@ def _render_dashboard(
         return False
 
     active = MENU_ITEMS[selected]
+    header_attr = palette.get("header", palette.get("title", 0))
+    subtitle_attr = palette.get("subtitle", palette.get("title", 0))
+    divider_attr = palette.get("divider", subtitle_attr)
+    detail_tagline_attr = palette.get("detail_tagline", subtitle_attr)
     menu_x = 2
     menu_width = max(24, min(32, width // 3 + 2))
     detail_x = menu_x + menu_width + 2
@@ -425,12 +439,14 @@ def _render_dashboard(
     detail_limit = separator_y
 
     # Header
-    _safe_addstr(stdscr, 0, 2, "GNOMAN Mission Control", palette["title"])
+    header_text = "GNOMAN Mission Control"
+    _safe_addstr(stdscr, 0, 2, header_text[: max(0, width - 4)], header_attr)
     version = "v0.3.0"
-    _safe_addstr(stdscr, 0, max(2, width - len(version) - 2), version, palette["subtitle"])
-    _safe_addstr(stdscr, 1, 2, "Guardian of Safes, Master of Keys", palette["subtitle"])
+    _safe_addstr(stdscr, 0, max(2, width - len(version) - 2), version, subtitle_attr)
+    subheading = "Operational console for Safe treasury workflows"
+    _safe_addstr(stdscr, 1, 2, subheading[: max(0, width - 4)], subtitle_attr)
     if width > 2:
-        _safe_addstr(stdscr, 2, 1, "-" * (width - 2), palette["subtitle"])
+        _safe_addstr(stdscr, 2, 1, "─" * (width - 2), divider_attr)
 
     # Menu column
     menu_start = 3
@@ -451,45 +467,41 @@ def _render_dashboard(
     _safe_addstr(stdscr, menu_start, menu_x, " " * menu_width)
     _safe_addstr(stdscr, menu_start, menu_x, header_label[:menu_width], palette["detail_heading"])
 
-    for view_idx, item_idx in enumerate(range(first_index, last_index)):
+    view_range = range(first_index, last_index)
+    for view_idx, item_idx in enumerate(view_range):
         item = MENU_ITEMS[item_idx]
         y = items_start + view_idx
-        label = f"[{item['key']}] {item['title']}"
+        prefix = "▸" if item_idx == selected else " "
+        label = f"{prefix} [{item['key']}] {item['title']}"
         padded = label[:menu_width].ljust(menu_width)
-        _safe_addstr(stdscr, y, menu_x, " " * menu_width)
-        if item_idx == selected:
-            _safe_addstr(stdscr, y, menu_x, padded, palette["menu_active"])
-        else:
-            _safe_addstr(stdscr, y, menu_x, padded, palette["menu_inactive"])
-            _safe_addstr(stdscr, y, menu_x + 1, item["key"], palette["menu_key"])
+        attr = palette["menu_active"] if item_idx == selected else palette["menu_inactive"]
+        _safe_addstr(stdscr, y, menu_x, padded, attr)
+        key_pos = label.find(item["key"])
+        if 0 <= key_pos < menu_width:
+            _safe_addstr(stdscr, y, menu_x + key_pos, item["key"], palette["menu_key"])
 
     # Divider between menu and detail panes
     divider_x = detail_x - 1
     for y in range(3, separator_y):
-        _safe_addstr(stdscr, y, divider_x, "|", palette["subtitle"])
+        _safe_addstr(stdscr, y, divider_x, "│", divider_attr)
 
     # Detail pane
     detail_top = 3
     if detail_width > 0:
         _clear_region(stdscr, detail_top, detail_x, max(0, separator_y - detail_top), detail_width)
     detail_y = detail_top
-    _safe_addstr(
-        stdscr,
-        detail_y,
-        detail_x,
-        f"{active['title']} module",
-        palette["detail_heading"],
-    )
+    _safe_addstr(stdscr, detail_y, detail_x, active["title"], palette["detail_heading"])
     detail_y += 1
     tagline = str(active.get("tagline") or "").strip()
-    if tagline:
+    if tagline and detail_y < detail_limit:
         for line in _wrap_text(tagline, detail_width):
             if detail_y >= detail_limit:
                 break
-            _safe_addstr(stdscr, detail_y, detail_x, line, palette["subtitle"])
+            _safe_addstr(stdscr, detail_y, detail_x, line, detail_tagline_attr)
             detail_y += 1
-        if detail_y < detail_limit:
-            detail_y += 1
+    if detail_y < detail_limit:
+        _safe_addstr(stdscr, detail_y, detail_x, "─" * max(0, detail_width), divider_attr)
+        detail_y += 1
     for line in _wrap_text(str(active["description"]), detail_width):
         if detail_y >= detail_limit:
             break
@@ -527,14 +539,16 @@ def _render_dashboard(
                 detail_y += 1
 
     if separator_y < height and width > 2:
-        _safe_addstr(stdscr, separator_y, 1, "-" * (width - 2), palette["subtitle"])
+        _safe_addstr(stdscr, separator_y, 1, "─" * (width - 2), divider_attr)
 
     # Status and footer
     status_width = max(0, width - 4)
     status_y = max(0, height - 3)
     if status_width > 0 and 0 <= status_y < height:
         _safe_addstr(stdscr, status_y, 2, " " * status_width)
-        status_text = f"Active module: {active['title']} — {active['tagline']}"
+        status_text = f"Selected • {active['title']}"
+        if active.get("tagline"):
+            status_text = f"{status_text} — {active['tagline']}"
         _safe_addstr(stdscr, status_y, 2, status_text[:status_width], palette["status"])
 
     footer_y = max(0, height - 2)
@@ -574,9 +588,13 @@ def _render_submenu(
         return False
 
     header = ctx.current_menu or title
-    _safe_addstr(stdscr, 0, 2, header[: max(0, width - 4)], palette["title"])
+    header_attr = palette.get("header", palette.get("title", 0))
+    divider_attr = palette.get("divider", palette.get("subtitle", 0))
+    _safe_addstr(stdscr, 0, 2, header[: max(0, width - 4)], header_attr)
     hint = "Use arrows or numbers to move • Press Enter to select"
-    _safe_addstr(stdscr, 1, 2, hint[: max(0, width - 4)], palette["subtitle"])
+    _safe_addstr(stdscr, 1, 2, hint[: max(0, width - 4)], palette.get("subtitle", header_attr))
+    if width > 2:
+        _safe_addstr(stdscr, 2, 1, "─" * (width - 2), divider_attr)
 
     menu_start = 3
     total = len(items)
@@ -1762,6 +1780,10 @@ def _show_about_menu(ctx: MenuContext) -> None:
             stdscr.erase()
             height, width = stdscr.getmaxyx()
 
+            header_attr = palette.get("header", palette.get("title", 0))
+            title_attr = palette.get("title", 0)
+            subtitle_attr = palette.get("subtitle", title_attr)
+
             if height < MIN_HEIGHT or width < MIN_WIDTH:
                 _render_resize_hint(stdscr, palette)
                 key = stdscr.getch()
@@ -1773,10 +1795,15 @@ def _show_about_menu(ctx: MenuContext) -> None:
                 continue
 
             row = 0
-            for idx, line in enumerate(LEGACY_BANNER_LINES):
-                attr = palette["title"] if idx < 6 else palette["subtitle"]
+            for idx, line in enumerate(WELCOME_CARD_LINES):
+                attr = header_attr if idx in {0, len(WELCOME_CARD_LINES) - 1} else title_attr
                 col = max(0, (width - len(line)) // 2)
                 _safe_addstr(stdscr, row, col, line, attr)
+                row += 1
+
+            for line in WELCOME_CARD_DETAIL:
+                col = max(0, (width - len(line)) // 2)
+                _safe_addstr(stdscr, row, col, line, subtitle_attr)
                 row += 1
 
             row += 1
@@ -1841,10 +1868,13 @@ def launch_tui() -> None:
         palette: Dict[str, int] = {
             "title": curses.A_BOLD,
             "subtitle": curses.A_DIM,
+            "header": curses.A_BOLD,
+            "divider": curses.A_DIM,
             "menu_active": curses.A_REVERSE | curses.A_BOLD,
             "menu_inactive": curses.A_NORMAL,
             "menu_key": curses.A_BOLD,
             "detail_heading": curses.A_BOLD,
+            "detail_tagline": curses.A_DIM,
             "detail_text": curses.A_NORMAL,
             "status": curses.A_BOLD,
             "footer": curses.A_DIM,
@@ -1854,13 +1884,21 @@ def launch_tui() -> None:
             curses.start_color()
             curses.use_default_colors()
             curses.init_pair(1, curses.COLOR_CYAN, -1)
-            curses.init_pair(2, curses.COLOR_MAGENTA, -1)
-            curses.init_pair(3, curses.COLOR_YELLOW, -1)
+            curses.init_pair(2, curses.COLOR_BLUE, -1)
+            curses.init_pair(3, curses.COLOR_WHITE, -1)
             curses.init_pair(4, curses.COLOR_GREEN, -1)
-            palette["title"] = curses.color_pair(1) | curses.A_BOLD
+            curses.init_pair(5, curses.COLOR_MAGENTA, -1)
+            curses.init_pair(6, curses.COLOR_YELLOW, -1)
+            palette["header"] = curses.color_pair(1) | curses.A_BOLD
+            palette["title"] = curses.color_pair(3) | curses.A_BOLD
+            palette["subtitle"] = curses.color_pair(2) | curses.A_DIM
+            palette["divider"] = curses.color_pair(2) | curses.A_DIM
             palette["menu_active"] = curses.color_pair(1) | curses.A_REVERSE | curses.A_BOLD
-            palette["menu_key"] = curses.color_pair(2) | curses.A_BOLD
+            palette["menu_inactive"] = curses.color_pair(2) | curses.A_DIM
+            palette["menu_key"] = curses.color_pair(5) | curses.A_BOLD
             palette["detail_heading"] = curses.color_pair(3) | curses.A_BOLD
+            palette["detail_tagline"] = curses.color_pair(6) | curses.A_DIM
+            palette["detail_text"] = curses.color_pair(3)
             palette["status"] = curses.color_pair(4) | curses.A_BOLD
             palette["footer"] = curses.color_pair(2) | curses.A_DIM
 
