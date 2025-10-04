@@ -8,11 +8,10 @@ from contextlib import contextmanager, redirect_stdout
 from dataclasses import dataclass, field
 from datetime import datetime
 from textwrap import wrap
-from types import SimpleNamespace
-from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
+from types import ModuleType, SimpleNamespace
+from typing import TYPE_CHECKING, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 from unittest import mock
 
-from . import core
 from .commands import (
     audit as audit_cmd,
     autopilot as autopilot_cmd,
@@ -238,6 +237,23 @@ QUIT_KEYS = {ord("q"), ord("Q"), 27}
 ENTER_KEYS = {curses.KEY_ENTER, ord("\n"), ord("\r")}
 
 DEFAULT_SAFE = "0xSAFECORE"
+
+if TYPE_CHECKING:  # pragma: no cover - imported only for type checking
+    from . import core as core_module
+
+_CORE_MODULE: Optional[ModuleType] = None
+
+
+def _load_core() -> ModuleType:
+    """Import :mod:`gnoman.core` lazily to avoid side effects at import time."""
+
+    global _CORE_MODULE
+    if _CORE_MODULE is None:
+        from . import core as core_module  # Local import defers heavy initialisation
+
+        _CORE_MODULE = core_module
+    assert _CORE_MODULE is not None
+    return _CORE_MODULE
 
 
 @dataclass
@@ -826,19 +842,21 @@ def _run_legacy_callable(
     return lines
 
 
-def _ensure_safe_initialised(ctx: MenuContext) -> None:
-    """Ensure the legacy Safe context has been bootstrapped."""
+def _ensure_safe_initialised(ctx: MenuContext) -> ModuleType:
+    """Ensure the legacy Safe context has been bootstrapped and return it."""
 
-    safe_ctx = getattr(core, "SAFE", None)
+    core_module = _load_core()
+    safe_ctx = getattr(core_module, "SAFE", None)
     if safe_ctx and getattr(safe_ctx, "contract", None) and getattr(safe_ctx, "addr", None):
-        return
+        return core_module
     try:
-        core.safe_init()
+        core_module.safe_init()
     except RuntimeError:
         safe_address = _prompt_input(ctx, "Safe address", required=True)
         assert safe_address is not None
         with _patched_prompts(inputs=[safe_address]):
-            core.safe_init()
+            core_module.safe_init()
+    return core_module
 
 
 def _invoke_command(
@@ -1090,27 +1108,27 @@ def _show_safe_legacy_menu(ctx: MenuContext) -> None:
 
 
 def _legacy_action_safe_info(ctx: MenuContext) -> List[str]:
-    _ensure_safe_initialised(ctx)
-    return _run_legacy_callable(core.safe_show_info)
+    core_module = _ensure_safe_initialised(ctx)
+    return _run_legacy_callable(core_module.safe_show_info)
 
 
 def _legacy_action_safe_fund(ctx: MenuContext) -> List[str]:
-    _ensure_safe_initialised(ctx)
+    core_module = _ensure_safe_initialised(ctx)
     amount = _prompt_input(ctx, "Amount ETH to send", required=True)
     assert amount is not None
-    return _run_legacy_callable(core.safe_fund_eth, inputs=[amount])
+    return _run_legacy_callable(core_module.safe_fund_eth, inputs=[amount])
 
 
 def _legacy_action_safe_send_erc20(ctx: MenuContext) -> List[str]:
-    _ensure_safe_initialised(ctx)
+    core_module = _ensure_safe_initialised(ctx)
     token = _prompt_input(ctx, "ERC20 token address", required=True)
     amount = _prompt_input(ctx, "Amount of token", required=True)
     assert token is not None and amount is not None
-    return _run_legacy_callable(core.safe_send_erc20, inputs=[token, amount])
+    return _run_legacy_callable(core_module.safe_send_erc20, inputs=[token, amount])
 
 
 def _legacy_action_safe_exec(ctx: MenuContext) -> List[str]:
-    _ensure_safe_initialised(ctx)
+    core_module = _ensure_safe_initialised(ctx)
     to_addr = _prompt_input(ctx, "Target address", required=True)
     assert to_addr is not None
     value_text = _prompt_input(ctx, "ETH value (default 0)", default="0", required=False) or "0"
@@ -1118,12 +1136,12 @@ def _legacy_action_safe_exec(ctx: MenuContext) -> List[str]:
     op_choice = _prompt_choice(ctx, "Operation type", ["0", "1"], default="0") or "0"
 
     try:
-        checksum_to = core.Web3.to_checksum_address(to_addr)
+        checksum_to = core_module.Web3.to_checksum_address(to_addr)
     except ValueError as exc:  # pragma: no cover - validation guard
         raise ValueError("Invalid target address") from exc
 
     try:
-        value_wei = int(core.Web3.to_wei(core.Decimal(value_text), "ether"))
+        value_wei = int(core_module.Web3.to_wei(core_module.Decimal(value_text), "ether"))
     except Exception as exc:  # pragma: no cover - validation guard
         raise ValueError("Invalid ETH amount") from exc
 
@@ -1131,11 +1149,11 @@ def _legacy_action_safe_exec(ctx: MenuContext) -> List[str]:
         data_bytes = b""
     else:
         try:
-            data_bytes = core.Web3.to_bytes(hexstr=calldata)
+            data_bytes = core_module.Web3.to_bytes(hexstr=calldata)
         except Exception as exc:  # pragma: no cover - validation guard
             raise ValueError("Invalid calldata hex") from exc
 
-    safe_ctx = getattr(core, "SAFE", None)
+    safe_ctx = getattr(core_module, "SAFE", None)
     needed = getattr(safe_ctx, "threshold", 0) or 1
     signatures: List[str] = []
     for index in range(int(needed)):
@@ -1144,70 +1162,70 @@ def _legacy_action_safe_exec(ctx: MenuContext) -> List[str]:
         signatures.append(sig)
 
     return _run_legacy_callable(
-        core.safe_exec_tx,
+        core_module.safe_exec_tx,
         args=[checksum_to, value_wei, data_bytes, int(op_choice)],
         inputs=signatures,
     )
 
 
 def _legacy_action_safe_add_owner(ctx: MenuContext) -> List[str]:
-    _ensure_safe_initialised(ctx)
+    core_module = _ensure_safe_initialised(ctx)
     owner = _prompt_input(ctx, "New owner address", required=True)
     assert owner is not None
-    return _run_legacy_callable(core.safe_add_owner, inputs=[owner])
+    return _run_legacy_callable(core_module.safe_add_owner, inputs=[owner])
 
 
 def _legacy_action_safe_remove_owner(ctx: MenuContext) -> List[str]:
-    _ensure_safe_initialised(ctx)
+    core_module = _ensure_safe_initialised(ctx)
     target = _prompt_input(ctx, "Owner to remove", required=True)
     previous = _prompt_input(ctx, "Previous owner (linked list)", required=True)
     assert target is not None and previous is not None
-    return _run_legacy_callable(core.safe_remove_owner, inputs=[target, previous])
+    return _run_legacy_callable(core_module.safe_remove_owner, inputs=[target, previous])
 
 
 def _legacy_action_safe_change_threshold(ctx: MenuContext) -> List[str]:
-    _ensure_safe_initialised(ctx)
+    core_module = _ensure_safe_initialised(ctx)
     threshold = _prompt_input(ctx, "New threshold (>0)", required=True)
     assert threshold is not None
-    return _run_legacy_callable(core.safe_change_threshold, inputs=[threshold])
+    return _run_legacy_callable(core_module.safe_change_threshold, inputs=[threshold])
 
 
 def _legacy_action_safe_add_delegate(ctx: MenuContext) -> List[str]:
-    _ensure_safe_initialised(ctx)
+    core_module = _ensure_safe_initialised(ctx)
     owner = _prompt_input(ctx, "Owner address", required=True)
     delegate = _prompt_input(ctx, "Delegate address", required=True)
     assert owner is not None and delegate is not None
-    return _run_legacy_callable(core.safe_add_delegate, inputs=[owner, delegate])
+    return _run_legacy_callable(core_module.safe_add_delegate, inputs=[owner, delegate])
 
 
 def _legacy_action_safe_remove_delegate(ctx: MenuContext) -> List[str]:
-    _ensure_safe_initialised(ctx)
+    core_module = _ensure_safe_initialised(ctx)
     owner = _prompt_input(ctx, "Owner address", required=True)
     delegate = _prompt_input(ctx, "Delegate to remove", required=True)
     assert owner is not None and delegate is not None
-    return _run_legacy_callable(core.safe_remove_delegate, inputs=[owner, delegate])
+    return _run_legacy_callable(core_module.safe_remove_delegate, inputs=[owner, delegate])
 
 
 def _legacy_action_safe_list_delegates(ctx: MenuContext) -> List[str]:
-    _ensure_safe_initialised(ctx)
-    return _run_legacy_callable(core.safe_list_delegates)
+    core_module = _ensure_safe_initialised(ctx)
+    return _run_legacy_callable(core_module.safe_list_delegates)
 
 
 def _legacy_action_safe_show_guard(ctx: MenuContext) -> List[str]:
-    _ensure_safe_initialised(ctx)
-    return _run_legacy_callable(core.safe_show_guard)
+    core_module = _ensure_safe_initialised(ctx)
+    return _run_legacy_callable(core_module.safe_show_guard)
 
 
 def _legacy_action_safe_enable_guard(ctx: MenuContext) -> List[str]:
-    _ensure_safe_initialised(ctx)
+    core_module = _ensure_safe_initialised(ctx)
     guard_addr = _prompt_input(ctx, "DelayGuard address", required=True)
     assert guard_addr is not None
-    return _run_legacy_callable(core.safe_toggle_guard, inputs=[guard_addr], args=[True])
+    return _run_legacy_callable(core_module.safe_toggle_guard, inputs=[guard_addr], args=[True])
 
 
 def _legacy_action_safe_disable_guard(ctx: MenuContext) -> List[str]:
-    _ensure_safe_initialised(ctx)
-    return _run_legacy_callable(core.safe_toggle_guard, args=[False])
+    core_module = _ensure_safe_initialised(ctx)
+    return _run_legacy_callable(core_module.safe_toggle_guard, args=[False])
 
 
 def _action_tx_simulate(ctx: MenuContext) -> List[str]:
@@ -1256,54 +1274,63 @@ def _build_tx_menu(ctx: MenuContext) -> Sequence[MenuEntry]:
 
 
 def _legacy_action_wallet_generate(ctx: MenuContext) -> List[str]:
-    return _run_legacy_callable(core.wal_generate_mnemonic)
+    core_module = _load_core()
+    return _run_legacy_callable(core_module.wal_generate_mnemonic)
 
 
 def _legacy_action_wallet_import(ctx: MenuContext) -> List[str]:
     mnemonic = _prompt_secret(ctx, "Enter mnemonic", required=True)
     assert mnemonic is not None
-    return _run_legacy_callable(core.wal_import_mnemonic, secrets=[mnemonic])
+    core_module = _load_core()
+    return _run_legacy_callable(core_module.wal_import_mnemonic, secrets=[mnemonic])
 
 
 def _legacy_action_wallet_passphrase(ctx: MenuContext) -> List[str]:
     passphrase = _prompt_secret(ctx, "Passphrase (blank clears)", required=False) or ""
-    return _run_legacy_callable(core.wal_set_passphrase, secrets=[passphrase])
+    core_module = _load_core()
+    return _run_legacy_callable(core_module.wal_set_passphrase, secrets=[passphrase])
 
 
 def _legacy_action_wallet_preview(ctx: MenuContext) -> List[str]:
     path = _prompt_input(ctx, "Derivation path", required=True)
     assert path is not None
-    return _run_legacy_callable(core.wal_preview, inputs=[path])
+    core_module = _load_core()
+    return _run_legacy_callable(core_module.wal_preview, inputs=[path])
 
 
 def _legacy_action_wallet_scan_default(ctx: MenuContext) -> List[str]:
     count = _prompt_int(ctx, "How many accounts", default=5, minimum=1) or 5
-    return _run_legacy_callable(core.wal_scan, args=[count, False])
+    core_module = _load_core()
+    return _run_legacy_callable(core_module.wal_scan, args=[count, False])
 
 
 def _legacy_action_wallet_scan_hidden(ctx: MenuContext) -> List[str]:
     count = _prompt_int(ctx, "How many hidden accounts", default=5, minimum=1) or 5
-    return _run_legacy_callable(core.wal_scan, args=[count, True])
+    core_module = _load_core()
+    return _run_legacy_callable(core_module.wal_scan, args=[count, True])
 
 
 def _legacy_action_wallet_derive(ctx: MenuContext) -> List[str]:
     path = _prompt_input(ctx, "Path (e.g., m/44'/60'/0'/0/1)", required=True)
     assert path is not None
-    address, _account = core.wal_derive(path)
+    core_module = _load_core()
+    address, _account = core_module.wal_derive(path)
     if address:
         return [f"{path} -> {address}"]
     return [f"Failed to derive address for {path}"]
 
 
 def _legacy_action_wallet_export(ctx: MenuContext) -> List[str]:
-    return _run_legacy_callable(core.wal_export_discovered)
+    core_module = _load_core()
+    return _run_legacy_callable(core_module.wal_export_discovered)
 
 
 def _legacy_action_wallet_label(ctx: MenuContext) -> List[str]:
     address = _prompt_input(ctx, "Address to label", required=True)
     label = _prompt_input(ctx, "Label", required=True)
     assert address is not None and label is not None
-    return _run_legacy_callable(core.wal_label, inputs=[address, label])
+    core_module = _load_core()
+    return _run_legacy_callable(core_module.wal_label, inputs=[address, label])
 
 
 def _build_wallet_menu(ctx: MenuContext) -> Sequence[MenuEntry]:
@@ -1379,23 +1406,27 @@ def _legacy_action_key_add(ctx: MenuContext) -> List[str]:
     key = _prompt_input(ctx, "Secret key (e.g., RPC_URL)", required=True)
     value = _prompt_secret(ctx, "Secret value", required=True)
     assert key is not None and value is not None
-    return _run_legacy_callable(core.km_add, inputs=[key], secrets=[value])
+    core_module = _load_core()
+    return _run_legacy_callable(core_module.km_add, inputs=[key], secrets=[value])
 
 
 def _legacy_action_key_get(ctx: MenuContext) -> List[str]:
     key = _prompt_input(ctx, "Secret key", required=True)
     assert key is not None
-    return _run_legacy_callable(core.km_get, inputs=[key])
+    core_module = _load_core()
+    return _run_legacy_callable(core_module.km_get, inputs=[key])
 
 
 def _legacy_action_key_delete(ctx: MenuContext) -> List[str]:
     key = _prompt_input(ctx, "Secret key to delete", required=True)
     assert key is not None
-    return _run_legacy_callable(core.km_del, inputs=[key])
+    core_module = _load_core()
+    return _run_legacy_callable(core_module.km_del, inputs=[key])
 
 
 def _legacy_action_key_list(ctx: MenuContext) -> List[str]:
-    return _run_legacy_callable(core.km_list_keyring)
+    core_module = _load_core()
+    return _run_legacy_callable(core_module.km_list_keyring)
 
 
 def _build_key_manager_menu(ctx: MenuContext) -> Sequence[MenuEntry]:
@@ -1664,7 +1695,8 @@ def _build_guard_menu(ctx: MenuContext) -> Sequence[MenuEntry]:
 
 
 def _legacy_action_about(ctx: MenuContext) -> List[str]:
-    return _run_legacy_callable(core.about_menu)
+    core_module = _load_core()
+    return _run_legacy_callable(core_module.about_menu)
 
 
 def _show_safe_menu(ctx: MenuContext) -> None:
