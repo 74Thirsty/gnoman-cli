@@ -73,6 +73,10 @@ def _palette() -> dict[str, int]:
     }
 
 
+def test_core_not_loaded_on_import() -> None:
+    assert tui._CORE_MODULE is None
+
+
 def test_root_menu_path_is_clean() -> None:
     window = FakeWindow(inputs=[ord("q")])
     ctx = tui.MenuContext(stdscr=window, palette=_palette())
