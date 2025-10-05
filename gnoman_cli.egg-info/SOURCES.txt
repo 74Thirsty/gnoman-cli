@@ -9,6 +9,7 @@ gnoman/audit.py
 gnoman/cli.py
 gnoman/legacy.py
 gnoman/core/__init__.py
+gnoman/core/abi_manager.py
 gnoman/core/audit_manager.py
 gnoman/core/contract_manager.py
 gnoman/core/log_manager.py
@@ -20,12 +21,14 @@ gnoman/ui/__init__.py
 gnoman/ui/dashboard.py
 gnoman/ui/main.py
 gnoman/ui/views/__init__.py
+gnoman/ui/views/abi_view.py
 gnoman/ui/views/audit_view.py
 gnoman/ui/views/safes_view.py
 gnoman/ui/views/secrets_view.py
 gnoman/ui/views/sync_view.py
 gnoman/ui/views/wallets_view.py
 gnoman/utils/__init__.py
+gnoman/utils/abi_manager.py
 gnoman/utils/crypto_tools.py
 gnoman/utils/env_tools.py
 gnoman/utils/keyring_backend.py
