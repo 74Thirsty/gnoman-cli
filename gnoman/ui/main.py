@@ -26,6 +26,7 @@ from web3.exceptions import Web3Exception
 
 from ..audit import read_tail_records, verify_tail
 from ..utils import keyring_backend
+from .views.abi_view import ABIScreen
 
 
 RPC_ENVIRONMENT_VARIABLE = "GNOMAN_ETH_RPC"
@@ -62,6 +63,7 @@ class NavigationBar(Container):
             ("wallets", "Wallets"),
             ("safes", "Safes"),
             ("contracts", "Contracts"),
+            ("abi", "ABI Tester"),
             ("audit", "Audit"),
             ("sync", "Sync"),
         ]
@@ -308,6 +310,7 @@ class MainPanel(Container):
         with self._switcher:
             yield OverviewScreen()
             yield SecretsScreen()
+            yield ABIScreen()
             yield PendingIntegration(
                 "Wallet orchestration requires hardware-signing integration. Configure Web3 + ledger to enable.",
                 tab_id="wallets",
@@ -452,6 +455,34 @@ class GNOMANMain(App[None]):
 
     #secrets-inspector {
         width: 1fr;
+    }
+
+    #abi-layout {
+        gap: 2;
+    }
+
+    #abi-list {
+        width: 1fr;
+        min-width: 24;
+    }
+
+    #abi-details {
+        width: 2fr;
+        gap: 1;
+    }
+
+    #abi-actions {
+        gap: 1;
+    }
+
+    #abi-log {
+        min-height: 10;
+        background: #00121A;
+        border: round #00324F;
+    }
+
+    .abi-label {
+        text-style: bold;
     }
 
     .pending {
