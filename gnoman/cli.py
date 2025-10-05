@@ -211,6 +211,20 @@ def build_parser() -> argparse.ArgumentParser:
     wallet_list = wallet_sub.add_parser("list", help="List derived accounts")
     wallet_list.set_defaults(handler=wallet.list_accounts)
 
+    wallet_passphrase = wallet_sub.add_parser(
+        "passphrase", help="Set or clear the encrypted wallet passphrase"
+    )
+    wallet_passphrase.add_argument(
+        "--passphrase",
+        help="Passphrase value (omit to be prompted interactively)",
+    )
+    wallet_passphrase.add_argument(
+        "--clear",
+        action="store_true",
+        help="Clear the stored passphrase (renders encrypted stores inaccessible)",
+    )
+    wallet_passphrase.set_defaults(handler=wallet.set_passphrase)
+
     wallet_vanity = wallet_sub.add_parser("vanity", help="Search for a vanity address")
     wallet_vanity.add_argument("--prefix", help="Hex prefix to match (case-insensitive)")
     wallet_vanity.add_argument("--suffix", help="Hex suffix to match (case-insensitive)")

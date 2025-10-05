@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import getpass
 from dataclasses import asdict
 from typing import Dict, List, Optional
 
@@ -34,6 +35,13 @@ def _manager() -> WalletManager:
     return _MANAGER
 
 
+def _seed_manager() -> WalletSeedManager:
+    try:
+        return WalletSeedManager(service_name=_service_name())
+    except WalletSeedError as exc:
+        raise SystemExit(str(exc)) from exc
+
+
 def new(args) -> Dict[str, object]:
     manager = _manager()
     try:
@@ -53,6 +61,42 @@ def list_accounts(args) -> Dict[str, List[Dict[str, object]]]:
     for rec in records:
         print(f"[WALLET] {rec['label']} -> {rec['address']} ({rec['derivation_path']})")
     return {"accounts": records}
+
+
+def set_passphrase(args) -> Dict[str, object]:
+    manager_cache_was_initialised = _MANAGER is not None
+    seed_manager = _seed_manager()
+    if args.clear:
+        try:
+            seed_manager.clear_passphrase()
+        except WalletSeedError as exc:
+            raise SystemExit(str(exc)) from exc
+        logbook.info({"action": "wallet_passphrase", "mode": "cleared"})
+        print("[WALLET] Cleared wallet passphrase")
+        _reset_manager_cache()
+        return {"cleared": True}
+
+    if args.passphrase is not None:
+        passphrase = args.passphrase
+    else:
+        prompt = "Enter new wallet passphrase: "
+        confirm_prompt = "Confirm new wallet passphrase: "
+        first = getpass.getpass(prompt)
+        second = getpass.getpass(confirm_prompt)
+        if first != second:
+            raise SystemExit("passphrase confirmation does not match")
+        passphrase = first
+
+    if not passphrase:
+        raise SystemExit("passphrase must not be empty; use --clear to remove it")
+    try:
+        seed_manager.store_passphrase(passphrase)
+    except WalletSeedError as exc:
+        raise SystemExit(str(exc)) from exc
+    logbook.info({"action": "wallet_passphrase", "mode": "set", "cached": manager_cache_was_initialised})
+    print("[WALLET] Updated wallet passphrase")
+    _reset_manager_cache()
+    return {"cleared": False}
 
 
 def vanity(args) -> Dict[str, object]:
@@ -84,3 +128,8 @@ def vanity(args) -> Dict[str, object]:
         f"[WALLET] Vanity match {record.address} ({record.derivation_path}, index={record.index})"
     )
     return payload
+
+
+def _reset_manager_cache() -> None:
+    global _MANAGER
+    _MANAGER = None
