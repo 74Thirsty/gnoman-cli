@@ -642,17 +642,24 @@ def km_add() -> None:
     if not val:
         print("Empty.");
         return
+    if not keyring:
+        print("⚠️ keyring backend unavailable; secret not stored.")
+        audit_log("km_set", {"key": key}, False, {"reason": "backend_unavailable"})
+        return
     stored = False
-    if keyring:
-        try:
-            keyring.set_password(_service_name(), key, val)
-            stored = True
-        except Exception as e:
-            logger.error(f"keyring set: {e}", exc_info=True)
+    error_reason: Optional[str] = None
+    try:
+        keyring.set_password(_service_name(), key, val)
+        stored = True
+    except Exception as e:
+        logger.error(f"keyring set: {e}", exc_info=True)
+        error_reason = e.__class__.__name__
     if stored:
         keyring_index.register_key(keyring, _service_name(), key)
-    print("✅ Stored in keyring")
-    audit_log("km_set", {"key": key}, True, {})
+        print("✅ Stored in keyring")
+    else:
+        print("❌ Failed to store secret in keyring.")
+    audit_log("km_set", {"key": key}, stored, {"reason": error_reason} if error_reason else {})
 
 def km_get() -> None:
     key = input("Secret key: ").strip()
@@ -675,16 +682,24 @@ def km_del() -> None:
     key = input("Secret key to delete: ").strip()
     if not key:
         return
-    ok = True
-    if keyring:
-        try:
-            keyring.delete_password(_service_name(), key)
-        except Exception:
-            ok = False
-        else:
-            keyring_index.unregister_key(keyring, _service_name(), key)
-    print("✅ Deleted from keyring (if present).")
-    audit_log("km_del", {"key": key}, ok, {})
+    if not keyring:
+        print("⚠️ keyring backend unavailable; nothing deleted.")
+        audit_log("km_del", {"key": key}, False, {"reason": "backend_unavailable"})
+        return
+    ok = False
+    error_reason: Optional[str] = None
+    try:
+        keyring.delete_password(_service_name(), key)
+        keyring_index.unregister_key(keyring, _service_name(), key)
+        ok = True
+    except Exception as exc:
+        logger.error("keyring delete failed", exc_info=True)
+        error_reason = exc.__class__.__name__
+    if ok:
+        print("✅ Deleted from keyring (if present).")
+    else:
+        print("❌ Failed to delete secret from keyring.")
+    audit_log("km_del", {"key": key}, ok, {"reason": error_reason} if error_reason else {})
 
 def km_list_keyring() -> None:  # L780
     if not keyring:
