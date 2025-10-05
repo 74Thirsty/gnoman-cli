@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gnoman-cli"
-version = "1.0.0"
-description = "GNOMAN universal keyring manager"
+version = "2.0.0"
+description = "GNOMAN mission-control console"
 readme = "README.md"
 authors = [
   { name = "Christopher Hirschauer", email = "c.hirschauer@gmail.com" }
@@ -40,8 +40,3 @@ gnoman = "gnoman.app:main"
 
 [tool.setuptools.packages.find]
 include = ["gnoman", "gnoman.*"]
-
-# No package data is required for the simplified keyring manager build
-[tool.setuptools.package-data]
-gnoman = []
-
