@@ -1444,7 +1444,14 @@ def _legacy_action_key_delete(ctx: MenuContext) -> List[str]:
 
 def _legacy_action_key_list(ctx: MenuContext) -> List[str]:
     core_module = _load_core()
-    return _run_legacy_callable(core_module.km_list_keyring)
+    existing_service = getattr(core_module, "_SERVICE_NAME", None) or "gnoman"
+    service = _prompt_input(
+        ctx,
+        "Keyring service name",
+        default=existing_service,
+        required=False,
+    ) or existing_service
+    return _run_legacy_callable(core_module.km_list_keyring, inputs=[service])
 
 
 def _build_key_manager_menu(ctx: MenuContext) -> Sequence[MenuEntry]:
