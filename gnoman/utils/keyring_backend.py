@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Dict, Iterable, Iterator, List, Optional, Protocol, Sequence, Tuple
 
 import keyring
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 
 
@@ -325,7 +325,7 @@ def _serialise_metadata(metadata: Dict[str, object]) -> Dict[str, object]:
 def _encrypt_entries(entries: Sequence[KeyringEntry], passphrase: str) -> Dict[str, str]:
     salt = secrets.token_bytes(16)
     key = _derive_key(passphrase, salt)
-    aesgcm = AESGCM(key)
+    cipher = ChaCha20Poly1305(key)
     nonce = secrets.token_bytes(12)
     payload = [
         {
@@ -337,9 +337,10 @@ def _encrypt_entries(entries: Sequence[KeyringEntry], passphrase: str) -> Dict[s
         for entry in entries
     ]
     plaintext = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    ciphertext = aesgcm.encrypt(nonce, plaintext, None)
+    ciphertext = cipher.encrypt(nonce, plaintext, None)
     return {
         "version": "1",
+        "cipher": "chacha20poly1305",
         "salt": base64.b64encode(salt).decode("ascii"),
         "nonce": base64.b64encode(nonce).decode("ascii"),
         "ciphertext": base64.b64encode(ciphertext).decode("ascii"),
@@ -370,12 +371,15 @@ def export_all(path: Path, passphrase: str) -> int:
 
 
 def _decrypt_entries(payload: Dict[str, str], passphrase: str) -> List[KeyringEntry]:
+    cipher_name = payload.get("cipher")
+    if cipher_name not in {None, "chacha20poly1305"}:
+        raise ValueError(f"Unsupported cipher '{cipher_name}' in keyring backup")
     salt = base64.b64decode(payload["salt"])
     nonce = base64.b64decode(payload["nonce"])
     ciphertext = base64.b64decode(payload["ciphertext"])
     key = _derive_key(passphrase, salt)
-    aesgcm = AESGCM(key)
-    plaintext = aesgcm.decrypt(nonce, ciphertext, None)
+    cipher = ChaCha20Poly1305(key)
+    plaintext = cipher.decrypt(nonce, ciphertext, None)
     decoded = json.loads(plaintext.decode("utf-8"))
     result = []
     for entry in decoded:
