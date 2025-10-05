@@ -1,29 +1,33 @@
-"""Application entry point launching the GNOMAN dashboard."""
+"""Application entry point launching the GNOMAN console dashboard."""
 
 from __future__ import annotations
 
-import argparse
 import importlib.util
 import logging
 import sys
 from textwrap import dedent
 from typing import Optional, Sequence
 
+from rich.console import Console
+
 from . import __version__
 from .audit import append_record
 
 
-def _missing_dashboard_dependencies() -> list[str]:
-    """Return a list of importable package names required for the dashboard.
+_BANNER = r"""
+ ██████╗ ███╗   ██╗ ██████ ███╗   ███╗ █████╗ ███╗   ██╗
+██╔════╝ ████╗  ██║██╔═══██╗████╗ ████║██╔══██╗████╗  ██║
+██║  ███╗██╔██╗ ██║██║   ██║██╔████╔██║███████║██╔██╗ ██║
+██║   ██║██║╚██╗██║██║   ██║██║╚██╔╝██║██╔══██║██║╚██╗██║
+╚██████╔╝██║ ╚████║╚██████╔╝██║ ╚═╝ ██║██║  ██║██║ ╚████║
+ ╚═════╝ ╚═╝  ╚═══╝ ╚═════╝ ╚═╝     ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝
+"""
 
-    GNOMAN bundles a Textual-based interface that depends on third-party
-    packages. When GNOMAN is executed from a source checkout without the
-    project being installed, those dependencies may be absent. Instead of
-    failing with a low-level ``ModuleNotFoundError`` we proactively probe for
-    the imports we need and surface a user-friendly diagnostic.
-    """
 
-    required = ("textual", "rich")
+def _missing_ui_dependencies() -> list[str]:
+    """Return a list of third-party packages required for the dashboard."""
+
+    required = ("prompt_toolkit", "rich")
     return [name for name in required if importlib.util.find_spec(name) is None]
 
 
@@ -35,7 +39,7 @@ def _print_dependency_error(missing: list[str]) -> None:
         GNOMAN could not start because the following Python packages are missing:
             {', '.join(sorted(missing))}
 
-        Install the project dependencies before launching the dashboard, e.g.:
+        Install the project dependencies before launching the console, e.g.:
             python -m pip install -e .
         or install the published package:
             python -m pip install gnoman-cli
@@ -44,63 +48,53 @@ def _print_dependency_error(missing: list[str]) -> None:
     print(message, file=sys.stderr)
 
 
-def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="gnoman", add_help=True)
-    parser.add_argument(
-        "--headless",
-        action="store_true",
-        help="Run the legacy GNOMAN CLI without launching the dashboard",
+def _render_splash() -> None:
+    """Display the GNOMAN startup banner using Rich for colour output."""
+
+    console = Console(highlight=False)
+    console.print(f"[#00B7FF]{_BANNER}[/]", justify="center")
+    console.print(
+        f"[#00B7FF bold]GNOMAN Mission Control v{__version__}[/]",
+        justify="center",
     )
-    return parser
+    console.print(
+        "[#7DF9FF]© 2025 Christopher Hirschauer — All Rights Reserved[/]",
+        justify="center",
+    )
+    console.print(
+        "[#39FF14]Licensed under GNOMAN License (see LICENSE.md)[/]",
+        justify="center",
+    )
 
 
-def _run_headless() -> None:
-    from . import legacy
+def _launch_terminal() -> None:
+    """Start the Prompt Toolkit dashboard once dependencies are confirmed."""
 
-    legacy.splash()
-    try:
-        legacy.main_menu()
-    finally:
-        legacy.logger.info("🧹 gnoman exiting.")
-        logging.shutdown()
-
-
-def _run_dashboard() -> None:
-    from . import legacy
-
-    missing = _missing_dashboard_dependencies()
+    missing = _missing_ui_dependencies()
     if missing:
         _print_dependency_error(missing)
         raise SystemExit(1)
 
-    legacy.splash()
+    _render_splash()
 
-    from .ui.main import GNOMANMain
+    from .ui import TerminalUI
 
     try:
-        append_record("ui.start", {"version": __version__}, True, {"mode": "dashboard"})
+        append_record("ui.start", {"version": __version__}, True, {"mode": "terminal"})
     except (NotImplementedError, ValueError):
         # Audit signing is optional but encouraged.
         pass
 
     try:
-        GNOMANMain().run()
+        TerminalUI().run()
     finally:
-        legacy.logger.info("🧹 gnoman exiting.")
         logging.shutdown()
 
 
 def main(argv: Optional[Sequence[str]] = None) -> None:
-    """Start the GNOMAN dashboard or legacy CLI."""
+    """Start GNOMAN Mission Control."""
 
-    parser = _build_parser()
-    args = parser.parse_args(list(argv) if argv is not None else None)
-
-    if args.headless:
-        _run_headless()
-    else:
-        _run_dashboard()
+    _launch_terminal()
 
 
 __all__ = ["main"]
-

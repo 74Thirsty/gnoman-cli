@@ -96,7 +96,7 @@ Requires-Python: >=3.11
 Description-Content-Type: text/markdown
 License-File: LICENSE.md
 License-File: LICENSEE.md
-Requires-Dist: textual<0.63.0,>=0.62.0
+Requires-Dist: prompt_toolkit>=3.0.48
 Requires-Dist: keyring>=24.0.0
 Requires-Dist: secretstorage>=3.3.3; platform_system == "Linux"
 Requires-Dist: cryptography>=42.0.0

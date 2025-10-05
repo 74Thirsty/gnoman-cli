@@ -2,14 +2,15 @@ from __future__ import annotations
 
 import pytest
 
+pytest.importorskip("prompt_toolkit")
 pytest.importorskip("rich")
-pytest.importorskip("textual")
 
-from gnoman.ui.main import GNOMANMain
+from gnoman.ui import TerminalUI
 
 
-def test_ui_initialises() -> None:
-    app = GNOMANMain()
-    # Ensure compose() yields the expected structure without raising
-    components = list(app.compose())
-    assert components
+def test_terminal_ui_menu_labels() -> None:
+    ui = TerminalUI()
+    labels = ui.main_menu_labels
+    assert "Secrets Vault" in labels
+    assert "Wallet Hangar" in labels
+    assert labels[-1] == "Quit"

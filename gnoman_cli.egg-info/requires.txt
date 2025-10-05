@@ -1,4 +1,4 @@
-textual<0.63.0,>=0.62.0
+prompt_toolkit>=3.0.48
 keyring>=24.0.0
 cryptography>=42.0.0
 web3>=6.0.0

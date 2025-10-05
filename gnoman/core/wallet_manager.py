@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -313,6 +314,40 @@ class WalletManager:
             updated += 1
         log_event("wallet.rotate", count=updated, labels=list(labels))
         return updated
+
+    def generate_vanity(
+        self,
+        pattern: str,
+        *,
+        case_sensitive: bool = False,
+        max_attempts: int = 500_000,
+    ) -> Dict[str, object]:
+        """Search for an address that matches ``pattern`` and return the key material."""
+
+        candidate = pattern.strip().lstrip("0x")
+        if not candidate:
+            raise ValueError("Pattern must contain at least one hexadecimal nibble")
+        if not all(ch in "0123456789abcdefABCDEF" for ch in candidate):
+            raise ValueError("Pattern must be hexadecimal")
+
+        target = candidate if case_sensitive else candidate.lower()
+        attempts = 0
+        while attempts < max_attempts:
+            attempts += 1
+            private_key = secrets.token_bytes(32)
+            account = Account.from_key(private_key)
+            address = account.address[2:]
+            haystack = address if case_sensitive else address.lower()
+            if haystack.startswith(target):
+                payload = {
+                    "address": account.address,
+                    "private_key": private_key.hex(),
+                    "attempts": attempts,
+                    "pattern": pattern,
+                }
+                log_event("wallet.vanity", pattern=pattern, attempts=attempts, address=account.address)
+                return payload
+        raise RuntimeError("Unable to find matching vanity address within attempt limit")
 
 
 __all__ = ["WalletManager", "WalletRecord", "DEFAULT_DERIVATION_PATH"]
