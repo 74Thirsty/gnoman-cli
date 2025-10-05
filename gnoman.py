@@ -43,6 +43,8 @@ from web3.exceptions import ContractLogicError  # L037
 from eth_account import Account  # L038
 from eth_account.signers.local import LocalAccount  # L039
 
+load_dotenv()
+
 try:  # pragma: no branch - import resolution is environment-dependent.
     from gnoman.utils.abi import load_safe_abi
     from gnoman.utils import keyring_index
@@ -174,14 +176,33 @@ def audit_log(action: str, params: Dict[str, Any], ok: bool, result: Dict[str, A
 
 
 # ───────── Secrets & Keyring helpers ─────────  # L161
-_SERVICE_NAME: Optional[str] = None    # L162
+SERVICE_NAME_ENV = "GNOMAN_SERVICE_NAME"
+DEFAULT_SERVICE_NAME = "gnoman"
+
+_SERVICE_NAME: Optional[str] = (os.getenv(SERVICE_NAME_ENV) or "").strip() or None
 
 def _service_name() -> str:  # L163
     global _SERVICE_NAME
-    if _SERVICE_NAME: return _SERVICE_NAME
-    s = input("Enter keyring service name [default=gnoman]: ").strip() or "gnoman"
-    _SERVICE_NAME = s
-    return s
+    if _SERVICE_NAME:
+        return _SERVICE_NAME
+
+    env_value = (os.getenv(SERVICE_NAME_ENV) or "").strip()
+    if env_value:
+        _SERVICE_NAME = env_value
+        return _SERVICE_NAME
+
+    stdin = getattr(sys, "stdin", None)
+    is_tty = bool(getattr(stdin, "isatty", lambda: False)())
+    if not is_tty:
+        _SERVICE_NAME = DEFAULT_SERVICE_NAME
+        return _SERVICE_NAME
+
+    try:
+        entered = input(f"Enter keyring service name [default={DEFAULT_SERVICE_NAME}]: ")
+    except (EOFError, KeyboardInterrupt):
+        entered = ""
+    _SERVICE_NAME = entered.strip() or DEFAULT_SERVICE_NAME
+    return _SERVICE_NAME
 
 def _get_secret(key: str, prompt_text: Optional[str]=None, sensitive: bool=True) -> str:  # L170
     if keyring:
@@ -238,7 +259,13 @@ def _init_web3() -> Web3:  # L202
         print("❌ Could not connect to RPC. Enter a different URL.")
         audit_log("web3_connect", {"rpc": rpc[:12]+"…"}, False, {"error": "connect_failed"})
 
-w3 = _init_web3()  # L221
+_WEB3: Optional[Web3] = None
+
+def _get_web3() -> Web3:
+    global _WEB3
+    if _WEB3 is None:
+        _WEB3 = _init_web3()
+    return _WEB3
 
 
 # ───────── 24h Hold (local persistence) ─────────  # L225
@@ -280,7 +307,8 @@ def safe_init() -> None:  # L256
     SAFE.addr = _cs(saddr)
 
     abi, abi_source = load_safe_abi()
-    SAFE.contract = w3.eth.contract(address=SAFE.addr, abi=abi)
+    web3 = _get_web3()
+    SAFE.contract = web3.eth.contract(address=SAFE.addr, abi=abi)
 
     SAFE.owners = [_cs(o) for o in SAFE.contract.functions.getOwners().call()]
     SAFE.threshold = SAFE.contract.functions.getThreshold().call()
@@ -365,19 +393,20 @@ def _apply_24h_hold() -> bool:  # L357
 def _send_tx(tx: Dict[str, Any]) -> Optional[str]:  # L374
     try:
         tx.setdefault("chainId", int(os.getenv("CHAIN_ID","1") or "1"))
-        tx.setdefault("nonce", w3.eth.get_transaction_count(SAFE.owners[0]))
+        web3 = _get_web3()
+        tx.setdefault("nonce", web3.eth.get_transaction_count(SAFE.owners[0]))
         if "maxFeePerGas" not in tx or "maxPriorityFeePerGas" not in tx:
-            base = w3.eth.gas_price
+            base = web3.eth.gas_price
             tx["maxPriorityFeePerGas"] = Web3.to_wei(1, "gwei")
             tx["maxFeePerGas"] = max(base * 2, Web3.to_wei(3, "gwei"))
         if "gas" not in tx:
             try:
-                est = w3.eth.estimate_gas({k:v for k,v in tx.items() if k in ("from","to","value","data")})
+                est = web3.eth.estimate_gas({k:v for k,v in tx.items() if k in ("from","to","value","data")})
                 tx["gas"] = int(est) + 100000
             except Exception:
                 tx["gas"] = 800000
-        txh = w3.eth.send_transaction(tx)
-        rcpt = w3.eth.wait_for_transaction_receipt(txh)
+        txh = web3.eth.send_transaction(tx)
+        rcpt = web3.eth.wait_for_transaction_receipt(txh)
         ok = (rcpt.status == 1)
         print(("✅" if ok else "❌") + f" tx={txh.hex()} block={rcpt.blockNumber} gasUsed={rcpt.gasUsed}")
         audit_log("send_tx", {"to": tx.get("to"), "value": int(tx.get("value",0))}, ok,
@@ -460,7 +489,8 @@ def safe_show_info() -> None:  # L478
     owners = SAFE.owners
     threshold = SAFE.threshold
     nonce = _safe_nonce()
-    eth = Decimal(w3.from_wei(w3.eth.get_balance(SAFE.addr), "ether"))
+    web3 = _get_web3()
+    eth = Decimal(web3.from_wei(web3.eth.get_balance(SAFE.addr), "ether"))
     out = {"safe": SAFE.addr, "owners": owners, "threshold": threshold, "nonce": nonce, "eth_balance": str(eth)}
     print(json.dumps(out, indent=2))
     audit_log("safe_info", {}, True, out)
@@ -476,7 +506,8 @@ def safe_fund_eth() -> None:  # L501
 
 def safe_send_erc20() -> None:  # L511
     token_addr = input("ERC20 token address: ").strip()
-    try: token = w3.eth.contract(address=_cs(token_addr), abi=ERC20_ABI_MIN)
+    web3 = _get_web3()
+    try: token = web3.eth.contract(address=_cs(token_addr), abi=ERC20_ABI_MIN)
     except Exception: 
         print("Invalid token."); 
         return
