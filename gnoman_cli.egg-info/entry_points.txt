@@ -1,0 +1,3 @@
+[console_scripts]
+gnoman = gnoman.app:main
+gnomanctl = gnoman.cli:main
