@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Dict, Optional, Tuple
 
 from gnoman.utils import keyring_index
+from gnoman.security import EncryptedJSONStore
 from gnoman.wallet import (
     DerivationResolver,
     HDWalletTree,
@@ -54,8 +55,12 @@ class WalletTestCase(unittest.TestCase):
         self.keyring = InMemoryKeyring()
         self.seed_manager = WalletSeedManager(service_name="test", backend=self.keyring)
         self.seed_manager.store_mnemonic(MNEMONIC)
+        self.seed_manager.store_passphrase("unit-test-passphrase")
         self.resolver = DerivationResolver(config_path=self.config_path)
-        self.state_path = self.temp_dir / "wallet_state.json"
+        self.state_path = self.temp_dir / "wallet_state.enc"
+        self.store = EncryptedJSONStore(
+            path=self.state_path, passphrase_resolver=lambda: "unit-test-passphrase"
+        )
 
     def tearDown(self) -> None:
         shutil.rmtree(self.temp_dir, ignore_errors=True)
@@ -87,6 +92,7 @@ class WalletTestCase(unittest.TestCase):
             seed_manager=self.seed_manager,
             resolver=self.resolver,
             state_path=self.state_path,
+            store=self.store,
         )
         record = manager.find_vanity(prefix="0x", max_attempts=5, log_every=1)
         metadata_key = f"wallet_vanity::{record.address}".lower()
@@ -101,6 +107,7 @@ class WalletTestCase(unittest.TestCase):
             seed_manager=self.seed_manager,
             resolver=self.resolver,
             state_path=self.state_path,
+            store=self.store,
         )
         manager.create_account("alpha", path="default")
         with self.assertRaises(WalletManagerError):

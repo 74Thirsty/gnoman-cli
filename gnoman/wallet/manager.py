@@ -10,6 +10,8 @@ from typing import Dict, List, Optional
 
 from eth_account.signers.local import LocalAccount
 
+from ..security import EncryptedJSONStore, EncryptedStoreError
+from ..utils.paths import state_dir
 from .hd import HDWalletTree
 from .resolver import DerivationResolver, DerivationError
 from .seed import SeedNotFoundError, WalletSeedError, WalletSeedManager
@@ -35,21 +37,25 @@ class WalletRecord:
 class WalletManager:
     seed_manager: WalletSeedManager
     resolver: DerivationResolver
-    state_path: Path = field(default_factory=lambda: Path.home() / ".gnoman" / "wallet_accounts.json")
+    state_path: Path = field(
+        default_factory=lambda: state_dir() / "secrets" / "wallet_accounts.enc"
+    )
+    store: Optional[EncryptedJSONStore] = None
 
     def __post_init__(self) -> None:
-        self.state_path.parent.mkdir(parents=True, exist_ok=True)
         self._tree = HDWalletTree(self.seed_manager, self.resolver)
+        self._store = self.store or EncryptedJSONStore(
+            path=self.state_path,
+            passphrase_resolver=self._resolve_passphrase,
+        )
         self._accounts = self._load_state()
 
     # -- persistence -------------------------------------------------------
     def _load_state(self) -> Dict[str, WalletRecord]:
-        if not self.state_path.exists():
-            return {}
         try:
-            payload = json.loads(self.state_path.read_text(encoding="utf-8"))
-        except Exception:
-            return {}
+            payload = self._store.load({})
+        except EncryptedStoreError as exc:
+            raise WalletManagerError("failed to decrypt wallet inventory") from exc
         records: Dict[str, WalletRecord] = {}
         for label, data in payload.items():
             try:
@@ -60,7 +66,10 @@ class WalletManager:
 
     def _save_state(self) -> None:
         serialisable = {label: record.__dict__ for label, record in self._accounts.items()}
-        self.state_path.write_text(json.dumps(serialisable, indent=2), encoding="utf-8")
+        try:
+            self._store.save(serialisable)
+        except EncryptedStoreError as exc:
+            raise WalletManagerError("failed to persist wallet inventory") from exc
 
     # -- helpers -----------------------------------------------------------
     def _next_index(self, path_identifier: str) -> int:
@@ -71,6 +80,17 @@ class WalletManager:
         if label not in self._accounts:
             raise WalletManagerError(f"unknown wallet label: {label}")
         return self._accounts[label]
+
+    def _resolve_passphrase(self) -> str:
+        try:
+            passphrase = self.seed_manager.get_passphrase()
+        except WalletSeedError as exc:
+            raise WalletManagerError("failed to access wallet passphrase") from exc
+        if not passphrase:
+            raise WalletManagerError(
+                "wallet passphrase not configured; run `gnoman wallet passphrase`"
+            )
+        return passphrase
 
     # -- public API --------------------------------------------------------
     def create_account(self, label: str, path: str = "default") -> WalletRecord:

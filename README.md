@@ -109,7 +109,8 @@ Navigate with arrow keys. q to quit.
 
 🔒 **Security Posture**
 • All secrets loaded from keyring-first (never plaintext by default).
-• Forensic logs signed with GNOMAN’s audit key.
+• Wallet inventory persisted via AES-GCM with PBKDF2-HMAC derived keys.
+• Forensic logs signed with GNOMAN’s audit key and chained hashes.
 • Ephemeral execution to prevent key leakage.
 • Multisig-first design: never trust a single key.
 
