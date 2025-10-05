@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gnoman-cli"
-version = "0.3.0"
-description = "GNOMAN mission control CLI for Safes, secrets, and guard rails"
+version = "1.0.0"
+description = "GNOMAN universal keyring manager"
 readme = "README.md"
 authors = [
   { name = "Christopher Hirschauer", email = "c.hirschauer@gmail.com" }
@@ -13,18 +13,13 @@ authors = [
 license = { file = "LICENSE.md" }
 requires-python = ">=3.9"
 dependencies = [
-  "eth-account>=0.9.0",
-  "web3>=6.0.0",
-  "eth-abi>=4.0.0",
   "keyring>=24.0.0",
-  "python-dotenv>=1.0.1",
   "cryptography>=42.0.0",
 ]
 classifiers = [
   "Programming Language :: Python :: 3",
   "Environment :: Console",
-  "Topic :: Security :: Cryptography",
-  "Topic :: Internet :: WWW/HTTP",
+  "Topic :: Security",
 ]
 
 [project.urls]
@@ -38,6 +33,7 @@ gnoman = "gnoman.cli:main"
 [tool.setuptools.packages.find]
 include = ["gnoman", "gnoman.*"]
 
+# No package data is required for the simplified keyring manager build
 [tool.setuptools.package-data]
-gnoman = ["data/GnosisSafe.json", "wallet_config/derivations.json"]
+gnoman = []
 
