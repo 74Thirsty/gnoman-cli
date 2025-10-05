@@ -123,6 +123,12 @@ Navigate with arrow keys. q to quit.
 
 ⸻
 
+📋 **Implementation Reality Check**
+
+The current open-source snapshot uses deterministic fixtures and simulated managers to make the demo experience self-contained. Before treating GNOMAN as production-ready, review the [Implementation Status](docs/IMPLEMENTATION_STATUS.md) report that catalogues the gaps versus the latest developer directive.
+
+⸻
+
 🧑‍💻 **Authors**
 
 Built with obsession by Christopher Hirschauer (</gadget_saavy>).
