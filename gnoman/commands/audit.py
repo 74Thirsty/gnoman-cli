@@ -7,14 +7,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List
 
-from ..utils import aes, logbook
+from ..services import get_audit_reporter, get_audit_signer
+from ..utils import logbook
 
 AUDIT_DIR = Path.home() / ".gnoman" / "audits"
 
 
 def run(args) -> Dict[str, object]:
-    collector = aes.get_audit_collector()
-    signer = aes.get_audit_signer()
+    collector = get_audit_reporter()
+    signer = get_audit_signer()
 
     payload = collector.collect()
     signature = signer.sign(payload)

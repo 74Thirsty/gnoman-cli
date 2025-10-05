@@ -4,17 +4,18 @@ from __future__ import annotations
 
 from typing import Dict, List
 
-from ..utils import aes, logbook
+from ..services import get_secrets_store
+from ..utils import logbook
 
 MASK = "***"
 
 
-def _coordinator() -> aes.SecretsSyncCoordinator:
-    return aes.get_secrets_coordinator()
+def _store():
+    return get_secrets_store()
 
 
 def list_secrets(args) -> Dict[str, List[Dict[str, object]]]:
-    coordinator = _coordinator()
+    coordinator = _store()
     snapshot = coordinator.snapshot()
     entries: List[Dict[str, object]] = []
     for key in coordinator.keys():
@@ -40,7 +41,7 @@ def list_secrets(args) -> Dict[str, List[Dict[str, object]]]:
 
 
 def add_secret(args) -> Dict[str, object]:
-    coordinator = _coordinator()
+    coordinator = _store()
     coordinator.set_secret(args.key, args.value)
     record = {
         "action": "secrets_add",
@@ -54,7 +55,7 @@ def add_secret(args) -> Dict[str, object]:
 
 
 def rotate_secret(args) -> Dict[str, object]:
-    coordinator = _coordinator()
+    coordinator = _store()
     new_value = coordinator.rotate_secret(args.key)
     record = {
         "action": "secrets_rotate",
@@ -69,7 +70,7 @@ def rotate_secret(args) -> Dict[str, object]:
 
 
 def remove_secret(args) -> Dict[str, object]:
-    coordinator = _coordinator()
+    coordinator = _store()
     coordinator.remove_secret(args.key)
     record = {
         "action": "secrets_remove",

@@ -8,15 +8,9 @@ from typing import Any, Callable, Optional, Sequence
 from . import __version__
 from .commands import (
     audit,
-    autopilot as autopilot_cmd,
-    graph,
-    guard,
-    plugin,
-    rescue,
+    recover,
     safe,
     secrets,
-    sync,
-    tx,
     wallet,
 )
 from .tui import launch_tui
@@ -34,16 +28,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=f"gnoman {__version__}")
 
     subparsers = parser.add_subparsers(dest="command")
-
-    # Synchronisation
-    sync_parser = subparsers.add_parser("sync", help="Synchronise secrets across environments")
-    sync_parser.add_argument("--force", action="store_true", help="Overwrite drift with highest priority values")
-    sync_parser.add_argument(
-        "--reconcile",
-        action="store_true",
-        help="Auto-reconcile drift using the AES priority order",
-    )
-    sync_parser.set_defaults(handler=sync.run)
 
     # Safe commands
     safe_parser = subparsers.add_parser("safe", help="Safe lifecycle operations")
@@ -67,22 +51,6 @@ def build_parser() -> argparse.ArgumentParser:
     safe_status = safe_sub.add_parser("status", help="Show Safe status")
     safe_status.add_argument("safe_address", help="Safe address to inspect")
     safe_status.set_defaults(handler=safe.status)
-
-    # Transaction commands
-    tx_parser = subparsers.add_parser("tx", help="Transaction simulation and execution")
-    tx_sub = tx_parser.add_subparsers(dest="tx_command")
-    tx_sub.required = True
-
-    tx_sim = tx_sub.add_parser("simulate", help="Simulate a Safe/DeFi transaction plan")
-    tx_sim.add_argument("proposal_id", nargs="?", help="Proposal identifier or plan reference")
-    tx_sim.add_argument("--plan", help="Path to an execution plan JSON file")
-    tx_sim.add_argument("--trace", action="store_true", help="Emit a full execution trace")
-    tx_sim.add_argument("--ml-off", action="store_true", help="Bypass the ML scorer stage")
-    tx_sim.set_defaults(handler=tx.simulate)
-
-    tx_exec = tx_sub.add_parser("exec", help="Execute a Safe proposal via tx module")
-    tx_exec.add_argument("proposal_id", help="Proposal identifier")
-    tx_exec.set_defaults(handler=tx.exec)
 
     # Secrets commands
     secrets_parser = subparsers.add_parser("secrets", help="Manage secrets and keyring entries")
@@ -109,90 +77,27 @@ def build_parser() -> argparse.ArgumentParser:
     audit_parser = subparsers.add_parser("audit", help="Generate a forensic snapshot")
     audit_parser.set_defaults(handler=audit.run)
 
-    # Graph commands
-    graph_parser = subparsers.add_parser("graph", help="Visualise routing and liquidity graphs")
-    graph_sub = graph_parser.add_subparsers(dest="graph_command")
-    graph_sub.required = True
+    # Recover command
+    recover_parser = subparsers.add_parser("recover", help="Incident recovery utilities")
+    recover_sub = recover_parser.add_subparsers(dest="recover_command")
+    recover_sub.required = True
 
-    graph_view = graph_sub.add_parser("view", help="Render the AES graph view")
-    graph_view.add_argument(
-        "--format",
-        choices=["svg", "png", "html"],
-        default="svg",
-        help="Export format for the rendered graph",
-    )
-    graph_view.add_argument(
-        "--output",
-        help="Optional output path. Defaults to ~/.gnoman/graphs",
-    )
-    graph_view.set_defaults(handler=graph.view)
+    recover_safe = recover_sub.add_parser("safe", help="Launch the Safe recovery wizard")
+    recover_safe.add_argument("safe_address", help="Target Safe address")
+    recover_safe.set_defaults(handler=recover.recover_safe)
 
-    # Autopilot command
-    autopilot_parser = subparsers.add_parser("autopilot", help="Run the AES autopilot pipeline")
-    autopilot_parser.add_argument("--plan", help="Optional path to a trading plan definition")
-    autopilot_parser.add_argument("--dry-run", action="store_true", help="Simulate only without broadcast")
-    autopilot_parser.add_argument("--execute", action="store_true", help="Broadcast via Safe when complete")
-    autopilot_parser.add_argument("--alerts-only", action="store_true", help="Send alerts without execution")
-    autopilot_parser.set_defaults(handler=autopilot_cmd.run)
+    recover_rotate = recover_sub.add_parser("rotate", help="Rotate executor wallets and Safe owners")
+    recover_rotate.set_defaults(handler=recover.rotate_all)
 
-    # Rescue command
-    rescue_parser = subparsers.add_parser("rescue", help="Incident recovery utilities")
-    rescue_sub = rescue_parser.add_subparsers(dest="rescue_command")
-    rescue_sub.required = True
-
-    rescue_safe = rescue_sub.add_parser("safe", help="Launch the Safe recovery wizard")
-    rescue_safe.add_argument("safe_address", help="Target Safe address")
-    rescue_safe.set_defaults(handler=rescue.rescue_safe)
-
-    # Rotate command
-    rotate_parser = subparsers.add_parser("rotate", help="Rotate wallets and signers")
-    rotate_sub = rotate_parser.add_subparsers(dest="rotate_command")
-    rotate_sub.required = True
-
-    rotate_all = rotate_sub.add_parser("all", help="Rotate all executor wallets and Safe owners")
-    rotate_all.set_defaults(handler=rescue.rotate_all)
-
-    # Freeze command
-    freeze_parser = subparsers.add_parser("freeze", help="Temporarily freeze a wallet or Safe")
-    freeze_parser.add_argument("target_type", choices=["wallet", "safe"], help="Entity type to freeze")
-    freeze_parser.add_argument("target_id", help="Wallet address or Safe identifier")
-    freeze_parser.add_argument(
+    recover_freeze = recover_sub.add_parser("freeze", help="Temporarily freeze a wallet or Safe")
+    recover_freeze.add_argument("target_type", choices=["wallet", "safe"], help="Entity type to freeze")
+    recover_freeze.add_argument("target_id", help="Wallet address or Safe identifier")
+    recover_freeze.add_argument(
         "--reason",
         default="incident response",
         help="Reason to record in the forensic log",
     )
-    freeze_parser.set_defaults(handler=rescue.freeze)
-
-    # Guard command
-    guard_parser = subparsers.add_parser("guard", help="Start the monitoring daemon")
-    guard_parser.add_argument(
-        "--cycles",
-        type=int,
-        default=3,
-        help="Number of monitoring cycles to execute before returning",
-    )
-    guard_parser.set_defaults(handler=guard.run)
-
-    # Plugin commands
-    plugin_parser = subparsers.add_parser("plugin", help="Manage plugins")
-    plugin_sub = plugin_parser.add_subparsers(dest="plugin_command")
-    plugin_sub.required = True
-
-    plugin_list = plugin_sub.add_parser("list", help="List installed plugins")
-    plugin_list.set_defaults(handler=plugin.list_plugins)
-
-    plugin_add = plugin_sub.add_parser("add", help="Add a plugin")
-    plugin_add.add_argument("name", help="Plugin name")
-    plugin_add.set_defaults(handler=plugin.add_plugin)
-
-    plugin_remove = plugin_sub.add_parser("remove", help="Remove a plugin")
-    plugin_remove.add_argument("name", help="Plugin name")
-    plugin_remove.set_defaults(handler=plugin.remove_plugin)
-
-    plugin_swap = plugin_sub.add_parser("swap", help="Hot-swap a plugin to a new version")
-    plugin_swap.add_argument("name", help="Plugin name to hot-swap")
-    plugin_swap.add_argument("version", help="Target plugin version")
-    plugin_swap.set_defaults(handler=plugin.swap)
+    recover_freeze.set_defaults(handler=recover.freeze)
 
     # Wallet commands
     wallet_parser = subparsers.add_parser("wallet", help="HD wallet management")
