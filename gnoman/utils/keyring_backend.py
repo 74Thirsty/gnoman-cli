@@ -7,7 +7,7 @@ import os
 import secrets
 import sys
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, Iterable, Iterator, List, Optional, Protocol, Tuple
@@ -15,6 +15,16 @@ from typing import Dict, Iterable, Iterator, List, Optional, Protocol, Tuple
 import keyring
 from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
+
+from .env_tools import get_gnoman_home
+
+
+@dataclass
+class KeyringEntry:
+    service: str
+    username: str
+    secret: Optional[str] = None
+    metadata: Dict[str, object] = field(default_factory=dict)
 
 class KeyringAdapter(Protocol):
     """Protocol implemented by every platform backend."""

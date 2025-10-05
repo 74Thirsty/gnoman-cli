@@ -10,7 +10,7 @@ from .app import main as app_main
 def main(argv: Optional[list[str]] = None) -> Any:
     """Delegate execution to :func:`gnoman.app.main`."""
 
-    return app_main(argv)
+    return app_main()
 
 
 if __name__ == "__main__":
