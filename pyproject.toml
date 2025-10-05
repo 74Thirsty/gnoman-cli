@@ -4,17 +4,25 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gnoman-cli"
-version = "1.0.0"
-description = "GNOMAN universal keyring manager"
+version = "2.0.0"
+description = "GNOMAN mission-control console"
 readme = "README.md"
 authors = [
   { name = "Christopher Hirschauer", email = "c.hirschauer@gmail.com" }
 ]
 license = { file = "LICENSE.md" }
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 dependencies = [
   "keyring>=24.0.0",
+  "secretstorage>=3.3.3",
+  "web3>=6.0.0",
+  "bip_utils>=2.7.0",
+  "click>=8.1.0",
+  "rich>=13.0.0",
+  "safe-eth-py>=5.0.0",
+  "eth_abi>=4.0.0",
   "cryptography>=42.0.0",
+  "pdfkit>=1.0.0",
 ]
 classifiers = [
   "Programming Language :: Python :: 3",
@@ -32,8 +40,3 @@ gnoman = "gnoman.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["gnoman", "gnoman.*"]
-
-# No package data is required for the simplified keyring manager build
-[tool.setuptools.package-data]
-gnoman = []
-
