@@ -13,16 +13,16 @@ authors = [
 license = { file = "LICENSE.md" }
 requires-python = ">=3.11"
 dependencies = [
+  "textual>=0.62.0,<0.63.0",
   "keyring>=24.0.0",
-  "secretstorage>=3.3.3",
+  "secretstorage>=3.3.3; platform_system == 'Linux'",
+  "cryptography>=42.0.0",
   "web3>=6.0.0",
   "bip_utils>=2.7.0",
-  "click>=8.1.0",
-  "rich>=13.0.0",
   "safe-eth-py>=5.0.0",
-  "eth_abi>=4.0.0",
-  "cryptography>=42.0.0",
+  "eth_abi>=4.2.1",
   "pdfkit>=1.0.0",
+  "rich>=13.0.0",
 ]
 classifiers = [
   "Programming Language :: Python :: 3",
@@ -36,7 +36,7 @@ Source = "https://github.com/74Thirsty/gnoman-cli"
 Issues = "https://github.com/74Thirsty/gnoman-cli/issues"
 
 [project.scripts]
-gnoman = "gnoman.cli:main"
+gnoman = "gnoman.app:main"
 
 [tool.setuptools.packages.find]
 include = ["gnoman", "gnoman.*"]

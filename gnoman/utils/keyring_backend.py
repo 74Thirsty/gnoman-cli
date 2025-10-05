@@ -13,20 +13,8 @@ from pathlib import Path
 from typing import Dict, Iterable, Iterator, List, Optional, Protocol, Tuple
 
 import keyring
-from keyring.errors import PasswordDeleteError
-
-from .env_tools import get_gnoman_home
-
-
-@dataclass(order=True)
-class KeyringEntry:
-    """Representation of an entry stored in the keyring."""
-
-    service: str
-    username: str
-    secret: Optional[str] = None
-    metadata: Optional[Dict[str, object]] = None
-
+from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
+from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 
 class KeyringAdapter(Protocol):
     """Protocol implemented by every platform backend."""
@@ -366,6 +354,120 @@ def delete_entry(service: str, username: str) -> None:
     adapter = _detect_adapter()
     adapter.delete_secret(service, username)
 
+def _derive_key(passphrase: str, salt: bytes) -> bytes:
+    kdf = Scrypt(salt=salt, length=32, n=2 ** 14, r=8, p=1)
+    return kdf.derive(passphrase.encode("utf-8"))
+
+
+def _serialise_metadata(metadata: Dict[str, object]) -> Dict[str, object]:
+    serialised: Dict[str, object] = {}
+    for key, value in metadata.items():
+        if isinstance(value, datetime):
+            serialised[key] = value.isoformat()
+        else:
+            serialised[key] = value
+    return serialised
+
+
+def _encrypt_entries(entries: Sequence[KeyringEntry], passphrase: str) -> Dict[str, str]:
+    salt = secrets.token_bytes(16)
+    key = _derive_key(passphrase, salt)
+    cipher = ChaCha20Poly1305(key)
+    nonce = secrets.token_bytes(12)
+    payload = [
+        {
+            "service": entry.service,
+            "username": entry.username,
+            "secret": entry.secret,
+            "metadata": _serialise_metadata(entry.metadata),
+        }
+        for entry in entries
+    ]
+    plaintext = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    ciphertext = cipher.encrypt(nonce, plaintext, None)
+    return {
+        "version": "1",
+        "cipher": "chacha20poly1305",
+        "salt": base64.b64encode(salt).decode("ascii"),
+        "nonce": base64.b64encode(nonce).decode("ascii"),
+        "ciphertext": base64.b64encode(ciphertext).decode("ascii"),
+    }
+
+
+def export_all(path: Path, passphrase: str) -> int:
+    """Export every keyring entry to *path* using a passphrase protected container."""
+
+    adapter = _detect_adapter()
+    entries = []
+    for entry in adapter.list_entries():
+        secret = adapter.get_secret(entry.service, entry.username)
+        if secret is None:
+            continue
+        entries.append(
+            KeyringEntry(
+                service=entry.service,
+                username=entry.username,
+                secret=secret,
+                metadata=entry.metadata,
+            )
+        )
+    container = _encrypt_entries(entries, passphrase)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(container, indent=2), encoding="utf-8")
+    return len(entries)
+
+
+def _decrypt_entries(payload: Dict[str, str], passphrase: str) -> List[KeyringEntry]:
+    cipher_name = payload.get("cipher")
+    if cipher_name not in {None, "chacha20poly1305"}:
+        raise ValueError(f"Unsupported cipher '{cipher_name}' in keyring backup")
+    salt = base64.b64decode(payload["salt"])
+    nonce = base64.b64decode(payload["nonce"])
+    ciphertext = base64.b64decode(payload["ciphertext"])
+    key = _derive_key(passphrase, salt)
+    cipher = ChaCha20Poly1305(key)
+    plaintext = cipher.decrypt(nonce, ciphertext, None)
+    decoded = json.loads(plaintext.decode("utf-8"))
+    result = []
+    for entry in decoded:
+        serialised_metadata = entry.get("metadata", {})
+        normalised_metadata: Dict[str, object] = {}
+        if isinstance(serialised_metadata, dict):
+            for key, value in serialised_metadata.items():
+                key_str = str(key)
+                if isinstance(value, str):
+                    try:
+                        normalised_metadata[key_str] = datetime.fromisoformat(value)
+                        continue
+                    except ValueError:
+                        pass
+                normalised_metadata[key_str] = value
+        result.append(
+            KeyringEntry(
+                service=str(entry["service"]),
+                username=str(entry["username"]),
+                secret=str(entry["secret"]),
+                metadata=normalised_metadata,
+            )
+        )
+    return result
+
+
+def import_entries(path: Path, passphrase: str, *, replace_existing: bool = False) -> int:
+    """Import keyring entries from *path* that was produced by :func:`export_all`."""
+
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    entries = _decrypt_entries(payload, passphrase)
+    adapter = _detect_adapter()
+    imported = 0
+    for entry in entries:
+        if not replace_existing:
+            current = adapter.get_secret(entry.service, entry.username)
+            if current is not None:
+                continue
+        adapter.set_secret(entry.service, entry.username, entry.secret or "")
+        imported += 1
+    return imported
 
 def rotate_entries(*, services: Optional[Iterable[str]] = None, length: int = 32) -> int:
     adapter = _detect_adapter()

@@ -1,16 +1,16 @@
-"""Console entrypoint bridging to :mod:`gnoman.cli`."""
+"""Console entrypoint bridging to :mod:`gnoman.app`."""
 
 from __future__ import annotations
 
 from typing import Any, Optional
 
-from .cli import main as cli_main
+from .app import main as app_main
 
 
 def main(argv: Optional[list[str]] = None) -> Any:
-    """Delegate execution to :func:`gnoman.cli.main`."""
+    """Delegate execution to :func:`gnoman.app.main`."""
 
-    return cli_main(argv)
+    return app_main(argv)
 
 
 if __name__ == "__main__":
