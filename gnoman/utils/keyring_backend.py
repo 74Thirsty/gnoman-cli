@@ -1,27 +1,37 @@
-"""Platform aware keyring enumeration helpers."""
+"""Platform aware keyring integration helpers."""
 
 from __future__ import annotations
 
-import base64
 import json
 import os
 import secrets
 import sys
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Dict, Iterable, Iterator, List, Optional, Protocol, Sequence, Tuple
+from typing import Dict, Iterable, Iterator, List, Optional, Protocol, Tuple
 
 import keyring
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
+from keyring.errors import PasswordDeleteError
+
+from .env_tools import get_gnoman_home
+
+
+@dataclass(order=True)
+class KeyringEntry:
+    """Representation of an entry stored in the keyring."""
+
+    service: str
+    username: str
+    secret: Optional[str] = None
+    metadata: Optional[Dict[str, object]] = None
 
 
 class KeyringAdapter(Protocol):
-    """Protocol implemented by platform specific adapters."""
+    """Protocol implemented by every platform backend."""
 
-    def list_entries(self) -> List["KeyringEntry"]:
+    def list_entries(self) -> List[KeyringEntry]:
         ...
 
     def get_secret(self, service: str, username: str) -> Optional[str]:
@@ -34,39 +44,124 @@ class KeyringAdapter(Protocol):
         ...
 
 
-@dataclass(order=True)
-class KeyringEntry:
-    """Represents a single keyring item."""
+class KeyringLibraryAdapter:
+    """Adapter built on top of :mod:`keyring` with a deterministic index."""
 
-    service: str
-    username: str
-    secret: Optional[str] = None
-    metadata: Dict[str, object] = field(default_factory=dict)
+    def __init__(self, base_path: Optional[Path] = None) -> None:
+        self._base_path = base_path or get_gnoman_home()
+        self._index_path = self._base_path / "secrets_index.json"
+
+    def _load_index(self) -> Dict[Tuple[str, str], Dict[str, object]]:
+        if not self._index_path.exists():
+            return {}
+        data = json.loads(self._index_path.read_text(encoding="utf-8"))
+        if not isinstance(data, list):
+            return {}
+        index: Dict[Tuple[str, str], Dict[str, object]] = {}
+        for entry in data:
+            if not isinstance(entry, dict):
+                continue
+            service = str(entry.get("service", ""))
+            username = str(entry.get("username", ""))
+            metadata = entry.get("metadata", {})
+            if not isinstance(metadata, dict):
+                metadata = {}
+            index[(service, username)] = dict(metadata)
+        return index
+
+    def _save_index(self, index: Dict[Tuple[str, str], Dict[str, object]]) -> None:
+        payload = [
+            {
+                "service": service,
+                "username": username,
+                "metadata": metadata,
+            }
+            for (service, username), metadata in sorted(index.items())
+        ]
+        self._base_path.mkdir(parents=True, exist_ok=True)
+        self._index_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    @staticmethod
+    def _normalise_metadata(metadata: Dict[str, object]) -> Dict[str, object]:
+        normalised: Dict[str, object] = {}
+        for key, value in metadata.items():
+            if isinstance(value, str):
+                try:
+                    normalised[key] = datetime.fromisoformat(value)
+                    continue
+                except ValueError:
+                    pass
+            normalised[key] = value
+        return normalised
+
+    def list_entries(self) -> List[KeyringEntry]:
+        entries: List[KeyringEntry] = []
+        for (service, username), metadata in self._load_index().items():
+            entries.append(
+                KeyringEntry(
+                    service=service,
+                    username=username,
+                    metadata=self._normalise_metadata(metadata),
+                )
+            )
+        entries.sort()
+        return entries
+
+    def get_secret(self, service: str, username: str) -> Optional[str]:
+        secret = keyring.get_password(service, username)
+        if secret is None:
+            return None
+        index = self._load_index()
+        metadata = index.get((service, username), {})
+        metadata["last_accessed"] = datetime.now(timezone.utc).isoformat()
+        index[(service, username)] = metadata
+        self._save_index(index)
+        return secret
+
+    def set_secret(self, service: str, username: str, secret: str) -> None:
+        keyring.set_password(service, username, secret)
+        index = self._load_index()
+        metadata = index.get((service, username), {})
+        now = datetime.now(timezone.utc).isoformat()
+        metadata.setdefault("created", now)
+        metadata["modified"] = now
+        index[(service, username)] = metadata
+        self._save_index(index)
+
+    def delete_secret(self, service: str, username: str) -> None:
+        try:
+            keyring.delete_password(service, username)
+        except PasswordDeleteError:
+            pass
+        index = self._load_index()
+        if (service, username) in index:
+            del index[(service, username)]
+            self._save_index(index)
 
 
 class SecretStorageAdapter:
-    """Adapter using the SecretService D-Bus API on Linux."""
+    """Adapter using the SecretService DBus API on Linux."""
 
     def __init__(self) -> None:
         try:
             import secretstorage  # type: ignore
-        except Exception as exc:  # pragma: no cover - import only fails on systems without dbus
-            raise RuntimeError("secretstorage is required to enumerate the system keyring") from exc
+        except Exception as exc:  # pragma: no cover - import specific to Linux
+            raise RuntimeError("secretstorage is required for SecretService access") from exc
         self._secretstorage = secretstorage
 
-    def _collection(self):
+    def _collection(self):  # pragma: no cover - requires host integration
         bus = self._secretstorage.dbus_init()
         collection = self._secretstorage.collection.get_default_collection(bus)
-        if collection.is_locked():  # pragma: no cover - depends on host configuration
+        if collection.is_locked():
             collection.unlock()
         return collection
 
-    def _iter_items(self):
+    def _iter_items(self):  # pragma: no cover - requires host integration
         collection = self._collection()
-        for item in collection.get_all_items():  # pragma: no cover - requires real keyring
+        for item in collection.get_all_items():
             yield item
 
-    def list_entries(self) -> List[KeyringEntry]:  # pragma: no cover - requires real keyring
+    def list_entries(self) -> List[KeyringEntry]:  # pragma: no cover - requires host integration
         entries: List[KeyringEntry] = []
         for item in self._iter_items():
             attrs = item.get_attributes()
@@ -81,20 +176,14 @@ class SecretStorageAdapter:
         entries.sort()
         return entries
 
-    def _find_item(self, service: str, username: str):  # pragma: no cover - requires real keyring
+    def get_secret(self, service: str, username: str) -> Optional[str]:  # pragma: no cover
         for item in self._iter_items():
             attrs = item.get_attributes()
             service_attr = attrs.get("service") or item.get_label() or ""
             username_attr = attrs.get("username") or attrs.get("user") or ""
             if service_attr == service and username_attr == username:
-                return item
+                return item.get_secret().decode("utf-8")
         return None
-
-    def get_secret(self, service: str, username: str) -> Optional[str]:  # pragma: no cover - requires real keyring
-        item = self._find_item(service, username)
-        if item is None:
-            return None
-        return item.get_secret().decode("utf-8")
 
     def set_secret(self, service: str, username: str, secret: str) -> None:
         keyring.set_password(service, username, secret)
@@ -102,18 +191,18 @@ class SecretStorageAdapter:
     def delete_secret(self, service: str, username: str) -> None:
         try:
             keyring.delete_password(service, username)
-        except keyring.errors.PasswordDeleteError:  # pragma: no cover - depends on host state
+        except PasswordDeleteError:
             pass
 
 
 class WindowsCredentialAdapter:
-    """Adapter built on top of the Windows Credential Manager APIs."""
+    """Adapter built on top of the Windows Credential Manager API."""
 
     def __init__(self) -> None:
         try:
             import win32cred  # type: ignore
-        except Exception as exc:  # pragma: no cover - import fails off Windows
-            raise RuntimeError("pywin32 is required to access the Windows credential store") from exc
+        except Exception as exc:  # pragma: no cover - import specific to Windows
+            raise RuntimeError("pywin32 is required to access the credential store") from exc
         self._win32cred = win32cred
 
     def list_entries(self) -> List[KeyringEntry]:  # pragma: no cover - requires Windows
@@ -130,7 +219,7 @@ class WindowsCredentialAdapter:
         entries.sort()
         return entries
 
-    def get_secret(self, service: str, username: str) -> Optional[str]:  # pragma: no cover - requires Windows
+    def get_secret(self, service: str, username: str) -> Optional[str]:  # pragma: no cover
         try:
             cred = self._win32cred.CredRead(service, self._win32cred.CRED_TYPE_GENERIC, 0)
         except self._win32cred.error:
@@ -140,7 +229,7 @@ class WindowsCredentialAdapter:
         blob: bytes = cred.get("CredentialBlob", b"")
         return blob.decode("utf-16le")
 
-    def set_secret(self, service: str, username: str, secret: str) -> None:  # pragma: no cover - requires Windows
+    def set_secret(self, service: str, username: str, secret: str) -> None:  # pragma: no cover
         credential = {
             "Type": self._win32cred.CRED_TYPE_GENERIC,
             "TargetName": service,
@@ -150,7 +239,7 @@ class WindowsCredentialAdapter:
         }
         self._win32cred.CredWrite(credential, 0)
 
-    def delete_secret(self, service: str, username: str) -> None:  # pragma: no cover - requires Windows
+    def delete_secret(self, service: str, username: str) -> None:  # pragma: no cover
         try:
             self._win32cred.CredDelete(service, self._win32cred.CRED_TYPE_GENERIC, 0)
         except self._win32cred.error:
@@ -158,7 +247,7 @@ class WindowsCredentialAdapter:
 
 
 class MacOSKeychainAdapter:
-    """Adapter wrapping the ``security`` command line tool on macOS."""
+    """Adapter that shells out to the macOS ``security`` CLI."""
 
     def list_entries(self) -> List[KeyringEntry]:  # pragma: no cover - requires macOS
         import subprocess
@@ -166,8 +255,8 @@ class MacOSKeychainAdapter:
         result = subprocess.run(
             ["security", "dump-keychain", "-d"],
             capture_output=True,
-            check=False,
             text=True,
+            check=False,
         )
         entries: List[KeyringEntry] = []
         service = ""
@@ -189,7 +278,7 @@ class MacOSKeychainAdapter:
         entries.sort()
         return entries
 
-    def get_secret(self, service: str, username: str) -> Optional[str]:  # pragma: no cover - requires macOS
+    def get_secret(self, service: str, username: str) -> Optional[str]:  # pragma: no cover
         import subprocess
 
         result = subprocess.run(
@@ -202,45 +291,14 @@ class MacOSKeychainAdapter:
             return None
         return result.stdout.strip()
 
-    def set_secret(self, service: str, username: str, secret: str) -> None:  # pragma: no cover - requires macOS
+    def set_secret(self, service: str, username: str, secret: str) -> None:  # pragma: no cover
         keyring.set_password(service, username, secret)
 
-    def delete_secret(self, service: str, username: str) -> None:  # pragma: no cover - requires macOS
+    def delete_secret(self, service: str, username: str) -> None:  # pragma: no cover
         try:
             keyring.delete_password(service, username)
-        except keyring.errors.PasswordDeleteError:
+        except PasswordDeleteError:
             pass
-
-
-class InMemoryAdapter:
-    """Testing adapter that keeps everything in process memory."""
-
-    def __init__(self) -> None:
-        self._data: Dict[Tuple[str, str], Dict[str, object]] = {}
-
-    def list_entries(self) -> List[KeyringEntry]:
-        entries: List[KeyringEntry] = []
-        for (svc, user), meta in self._data.items():
-            metadata = dict(meta)
-            metadata.pop("secret", None)
-            entries.append(KeyringEntry(service=svc, username=user, metadata=metadata))
-        entries.sort()
-        return entries
-
-    def get_secret(self, service: str, username: str) -> Optional[str]:
-        record = self._data.get((service, username))
-        if not record:
-            return None
-        return record.get("secret")  # type: ignore[return-value]
-
-    def set_secret(self, service: str, username: str, secret: str) -> None:
-        now = datetime.now(timezone.utc)
-        meta = self._data.setdefault((service, username), {"created": now})
-        meta["secret"] = secret
-        meta["modified"] = now
-
-    def delete_secret(self, service: str, username: str) -> None:
-        self._data.pop((service, username), None)
 
 
 _adapter_override: Optional[KeyringAdapter] = None
@@ -248,8 +306,6 @@ _adapter_override: Optional[KeyringAdapter] = None
 
 @contextmanager
 def use_adapter(adapter: KeyringAdapter) -> Iterator[None]:
-    """Context manager forcing *adapter* to be used."""
-
     global _adapter_override
     previous = _adapter_override
     _adapter_override = adapter
@@ -262,166 +318,56 @@ def use_adapter(adapter: KeyringAdapter) -> Iterator[None]:
 def _detect_adapter() -> KeyringAdapter:
     if _adapter_override is not None:
         return _adapter_override
+    forced = os.environ.get("GNOMAN_FORCE_ADAPTER")
+    if forced == "library":
+        return KeyringLibraryAdapter()
     if sys.platform.startswith("linux"):
-        return SecretStorageAdapter()
+        try:
+            return SecretStorageAdapter()
+        except RuntimeError:
+            pass
     if sys.platform == "darwin":
         return MacOSKeychainAdapter()
     if os.name == "nt":
-        return WindowsCredentialAdapter()
-    return InMemoryAdapter()
+        try:
+            return WindowsCredentialAdapter()
+        except RuntimeError:
+            pass
+    return KeyringLibraryAdapter()
 
 
 def list_all_entries() -> List[KeyringEntry]:
-    """Return every entry from the active keyring backend."""
-
     adapter = _detect_adapter()
     return adapter.list_entries()
 
 
 def get_entry(service: str, username: str) -> Optional[KeyringEntry]:
-    """Retrieve a single keyring entry including the secret."""
-
     adapter = _detect_adapter()
     secret = adapter.get_secret(service, username)
     if secret is None:
         return None
-    metadata = {}
     for entry in adapter.list_entries():
         if entry.service == service and entry.username == username:
-            metadata = entry.metadata
-            break
-    return KeyringEntry(service=service, username=username, secret=secret, metadata=metadata)
+            return KeyringEntry(
+                service=service,
+                username=username,
+                secret=secret,
+                metadata=entry.metadata,
+            )
+    return KeyringEntry(service=service, username=username, secret=secret, metadata={})
 
 
 def set_entry(service: str, username: str, secret: str) -> None:
-    """Create or update an entry in the keyring."""
-
     adapter = _detect_adapter()
     adapter.set_secret(service, username, secret)
 
 
 def delete_entry(service: str, username: str) -> None:
-    """Delete an entry from the keyring."""
-
     adapter = _detect_adapter()
     adapter.delete_secret(service, username)
 
 
-def _derive_key(passphrase: str, salt: bytes) -> bytes:
-    kdf = Scrypt(salt=salt, length=32, n=2 ** 14, r=8, p=1)
-    return kdf.derive(passphrase.encode("utf-8"))
-
-
-def _serialise_metadata(metadata: Dict[str, object]) -> Dict[str, object]:
-    serialised: Dict[str, object] = {}
-    for key, value in metadata.items():
-        if isinstance(value, datetime):
-            serialised[key] = value.isoformat()
-        else:
-            serialised[key] = value
-    return serialised
-
-
-def _encrypt_entries(entries: Sequence[KeyringEntry], passphrase: str) -> Dict[str, str]:
-    salt = secrets.token_bytes(16)
-    key = _derive_key(passphrase, salt)
-    aesgcm = AESGCM(key)
-    nonce = secrets.token_bytes(12)
-    payload = [
-        {
-            "service": entry.service,
-            "username": entry.username,
-            "secret": entry.secret,
-            "metadata": _serialise_metadata(entry.metadata),
-        }
-        for entry in entries
-    ]
-    plaintext = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    ciphertext = aesgcm.encrypt(nonce, plaintext, None)
-    return {
-        "version": "1",
-        "salt": base64.b64encode(salt).decode("ascii"),
-        "nonce": base64.b64encode(nonce).decode("ascii"),
-        "ciphertext": base64.b64encode(ciphertext).decode("ascii"),
-    }
-
-
-def export_all(path: Path, passphrase: str) -> int:
-    """Export every keyring entry to *path* using a passphrase protected container."""
-
-    adapter = _detect_adapter()
-    entries = []
-    for entry in adapter.list_entries():
-        secret = adapter.get_secret(entry.service, entry.username)
-        if secret is None:
-            continue
-        entries.append(
-            KeyringEntry(
-                service=entry.service,
-                username=entry.username,
-                secret=secret,
-                metadata=entry.metadata,
-            )
-        )
-    container = _encrypt_entries(entries, passphrase)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(container, indent=2), encoding="utf-8")
-    return len(entries)
-
-
-def _decrypt_entries(payload: Dict[str, str], passphrase: str) -> List[KeyringEntry]:
-    salt = base64.b64decode(payload["salt"])
-    nonce = base64.b64decode(payload["nonce"])
-    ciphertext = base64.b64decode(payload["ciphertext"])
-    key = _derive_key(passphrase, salt)
-    aesgcm = AESGCM(key)
-    plaintext = aesgcm.decrypt(nonce, ciphertext, None)
-    decoded = json.loads(plaintext.decode("utf-8"))
-    result = []
-    for entry in decoded:
-        serialised_metadata = entry.get("metadata", {})
-        normalised_metadata: Dict[str, object] = {}
-        if isinstance(serialised_metadata, dict):
-            for key, value in serialised_metadata.items():
-                key_str = str(key)
-                if isinstance(value, str):
-                    try:
-                        normalised_metadata[key_str] = datetime.fromisoformat(value)
-                        continue
-                    except ValueError:
-                        pass
-                normalised_metadata[key_str] = value
-        result.append(
-            KeyringEntry(
-                service=str(entry["service"]),
-                username=str(entry["username"]),
-                secret=str(entry["secret"]),
-                metadata=normalised_metadata,
-            )
-        )
-    return result
-
-
-def import_entries(path: Path, passphrase: str, *, replace_existing: bool = False) -> int:
-    """Import keyring entries from *path* that was produced by :func:`export_all`."""
-
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    entries = _decrypt_entries(payload, passphrase)
-    adapter = _detect_adapter()
-    imported = 0
-    for entry in entries:
-        if not replace_existing:
-            current = adapter.get_secret(entry.service, entry.username)
-            if current is not None:
-                continue
-        adapter.set_secret(entry.service, entry.username, entry.secret or "")
-        imported += 1
-    return imported
-
-
 def rotate_entries(*, services: Optional[Iterable[str]] = None, length: int = 32) -> int:
-    """Rotate credentials by generating fresh high entropy values."""
-
     adapter = _detect_adapter()
     whitelist = set(services) if services else None
     rotated = 0
@@ -435,8 +381,6 @@ def rotate_entries(*, services: Optional[Iterable[str]] = None, length: int = 32
 
 
 def audit_entries(*, stale_days: int = 180) -> Dict[str, object]:
-    """Generate a high level report about the current keyring contents."""
-
     adapter = _detect_adapter()
     entries = adapter.list_entries()
     total = len(entries)
@@ -444,17 +388,16 @@ def audit_entries(*, stale_days: int = 180) -> Dict[str, object]:
     missing_usernames = []
     stale: List[Tuple[str, str]] = []
     now = datetime.now(timezone.utc)
-    threshold = now - timedelta(days=stale_days)
+    threshold = now - timedelta(days=stale_days) if stale_days else None
 
     for entry in entries:
         key = (entry.service, entry.username)
         duplicates[key] = duplicates.get(key, 0) + 1
         if not entry.username:
             missing_usernames.append(entry.service)
-        modified = entry.metadata.get("modified") if isinstance(entry.metadata, dict) else None
-        if isinstance(modified, datetime) and modified.tzinfo is None:
-            modified = modified.replace(tzinfo=timezone.utc)
-        if isinstance(modified, datetime) and modified < threshold:
+        metadata = entry.metadata or {}
+        modified = metadata.get("modified")
+        if isinstance(modified, datetime) and threshold and modified < threshold:
             stale.append(key)
 
     duplicate_list = [f"{service}/{username}" for (service, username), count in duplicates.items() if count > 1]
@@ -462,7 +405,7 @@ def audit_entries(*, stale_days: int = 180) -> Dict[str, object]:
 
     return {
         "total": total,
-        "duplicates": sorted(duplicate_list),
+        "duplicates": sorted(set(duplicate_list)),
         "missing_usernames": sorted(set(missing_usernames)),
         "stale": sorted(set(stale_list)),
     }
@@ -470,12 +413,10 @@ def audit_entries(*, stale_days: int = 180) -> Dict[str, object]:
 
 __all__ = [
     "KeyringEntry",
-    "InMemoryAdapter",
+    "KeyringLibraryAdapter",
     "audit_entries",
     "delete_entry",
-    "export_all",
     "get_entry",
-    "import_entries",
     "list_all_entries",
     "rotate_entries",
     "set_entry",

@@ -1,13 +1,13 @@
-"""Utility helpers for GNOMAN."""
+"""Utility helpers exposed by GNOMAN."""
 
+from .crypto_tools import sign_payload
+from .env_tools import env_file_paths, get_gnoman_home
 from .keyring_backend import (
-    InMemoryAdapter,
     KeyringEntry,
+    KeyringLibraryAdapter,
     audit_entries,
     delete_entry,
-    export_all,
     get_entry,
-    import_entries,
     list_all_entries,
     rotate_entries,
     set_entry,
@@ -15,15 +15,16 @@ from .keyring_backend import (
 )
 
 __all__ = [
-    "InMemoryAdapter",
     "KeyringEntry",
+    "KeyringLibraryAdapter",
     "audit_entries",
     "delete_entry",
-    "export_all",
+    "env_file_paths",
     "get_entry",
-    "import_entries",
+    "get_gnoman_home",
     "list_all_entries",
     "rotate_entries",
     "set_entry",
+    "sign_payload",
     "use_adapter",
 ]
