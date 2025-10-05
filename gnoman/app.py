@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import argparse
 import importlib.util
+import logging
 import sys
 from textwrap import dedent
+from typing import Optional, Sequence
 
 from . import __version__
 from .audit import append_record
@@ -41,13 +44,36 @@ def _print_dependency_error(missing: list[str]) -> None:
     print(message, file=sys.stderr)
 
 
-def main() -> None:
-    """Start the interactive Textual dashboard."""
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="gnoman", add_help=True)
+    parser.add_argument(
+        "--headless",
+        action="store_true",
+        help="Run the legacy GNOMAN CLI without launching the dashboard",
+    )
+    return parser
+
+
+def _run_headless() -> None:
+    from . import legacy
+
+    legacy.splash()
+    try:
+        legacy.main_menu()
+    finally:
+        legacy.logger.info("🧹 gnoman exiting.")
+        logging.shutdown()
+
+
+def _run_dashboard() -> None:
+    from . import legacy
 
     missing = _missing_dashboard_dependencies()
     if missing:
         _print_dependency_error(missing)
         raise SystemExit(1)
+
+    legacy.splash()
 
     from .ui.main import GNOMANMain
 
@@ -56,7 +82,24 @@ def main() -> None:
     except (NotImplementedError, ValueError):
         # Audit signing is optional but encouraged.
         pass
-    GNOMANMain().run()
+
+    try:
+        GNOMANMain().run()
+    finally:
+        legacy.logger.info("🧹 gnoman exiting.")
+        logging.shutdown()
+
+
+def main(argv: Optional[Sequence[str]] = None) -> None:
+    """Start the GNOMAN dashboard or legacy CLI."""
+
+    parser = _build_parser()
+    args = parser.parse_args(list(argv) if argv is not None else None)
+
+    if args.headless:
+        _run_headless()
+    else:
+        _run_dashboard()
 
 
 __all__ = ["main"]
