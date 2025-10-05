@@ -1,163 +1,90 @@
-# GNOMAN: Guardian of Safes, Master of Keys
-![Sheen Banner](https://raw.githubusercontent.com/74Thirsty/74Thirsty/main/assets/gnoman.svg)
+# GNOMAN — Universal Keyring Manager
 
-![Docker Pulls](https://img.shields.io/docker/pulls/gadgetsaavy/gnoman?style=for-the-badge&logo=docker&color=009DDC)
-![PyPI](https://img.shields.io/pypi/v/gnoman-cli?style=for-the-badge&logo=python&color=72CDF4)
+GNOMAN is a cross-platform command line tool that inspects and maintains the
+secrets stored in your operating system keyring. It provides a consistent
+interface across Linux (Secret Service), macOS (Keychain) and Windows
+(Credential Locker) so that you can audit, export, rotate and restore
+credentials without leaving the terminal.
 
-✨ **What is GNOMAN?**
+## Features
 
-GNOMAN is a mission-control console for multisig operators, forensic auditors, and DeFi incident responders.
-It fuses:
-  • A modular command-line interface  
-  • A curses-powered dashboard UI  
-  • Forensic logging and signed audit trails  
-  • Deep integrations with wallets, keyrings, and Gnosis Safes  
+- 🔍 **Enumerate every keyring entry** regardless of namespace or application.
+- 🧾 **Inspect and audit** secrets for stale credentials, missing metadata and
+  duplicates.
+- ✍️ **Create, update or delete** entries using the native system backend.
+- 📦 **Encrypted export/import** routines for disaster recovery and migration.
+- ♻️ **Credential rotation** that generates high-entropy replacements in bulk.
 
-GNOMAN replaces a zoo of fragile scripts with a single god-tier control deck.
+## Installation
 
-# 🚀 **Core Features**
-
-🔑 **Secrets & Wallets**
-  • Full keyring integration (freedesktop-secrets, macOS Keychain, Windows Credential Locker).  
-  • .env / .env.secure drift detection and reconciliation.  
-  • HD wallet support with:  
-    • Hidden derivation trees  
-    • Custom derivation paths  
-    • Vanity address generation  
-    • Cold wallet / hot executor separation.  
-  • Wallet monitoring with real-time balance and nonce tracking.
-
-🏛️ **Safe Orchestration**
-  • Deploy new Gnosis Safes with arbitrary owner sets & thresholds.  
-  • Add/remove owners, rotate keys, and patch Safe configs live.  
-  • Automatic Safe ABI syncing (via ABISchemaManager).  
-  • Submit, batch, and simulate transactions across multiple Safes.
-
-🧰 **Contract Toolkit**
-  • ABI loading, schema enforcement, and method resolution.  
-  • Transaction builder with type-safe argument validation.  
-  • Ephemeral executors for flash execution (EIP-6780 friendly).  
-  • Gas calibration and automatic fee bumpers.
-
-📊 **Forensic Audit Mode**
-  • Crawl wallets, Safes, and secrets into a signed report (JSON/PDF).  
-  • Includes:  
-    • Wallet balance snapshots  
-    • Safe threshold configs  
-    • Expiring secrets  
-    • Last access timestamps  
-  • Reports cryptographically signed with GNOMAN’s audit key.
-
-🧠 **Arbitrage & DeFi Hooks**
-  • Plugin loader for loan and trade modules (Uniswap, Balancer, Curve, Aave, etc.).  
-  • Canonical schema enforcement for graph + execution steps.  
-  • RPZE pathfinding validator integration.  
-  • ExecutionManager hooks for cycle watching, memory attach, and readiness checks.
-
-📡 **Sync & Drift Detection**
-  • gnoman sync: reconcile secrets across keyring, .env, .env.secure, and remote vaults.  
-  • Detect drift and resolve conflicts interactively.
-
-📟 **Dashboard UI**
-  • Curses-powered neon cockpit.  
-  • Views: diffs, branches, GitHub status, Safe states, audit logs.  
-  • Keyboard-driven interactive ops (submit tx, rotate key, reconcile secrets).
-
-# 🔧 **Installation**
-
-From PyPI:
+Install GNOMAN from PyPI:
 
 ```bash
 pip install gnoman-cli
-````
-
-From DockerHub:
-
-```bash
-docker pull gadgetsaavy/gnoman:latest
-docker run -it gadgetsaavy/gnoman
 ```
 
-From Source:
+## Usage
 
-```bash
-git clone https://github.com/74Thirsty/gnoman-cli.git
-cd gnoman-cli
-pip install -e .
+```
+usage: gnoman [-h] [--version] {list,show,set,delete,export,import,rotate,audit} ...
 ```
 
-# 🕹️ **Usage**
-
-CLI:
+### List keyring entries
 
 ```bash
-gnoman safe deploy --owners 0xA.. 0xB.. 0xC.. --threshold 2
-gnoman wallet derive --path "m/44'/60'/0'/0/1337"
-gnoman sync
-gnoman audit --output report.pdf
+gnoman list --namespace github
 ```
 
-Dashboard:
+### Show a secret
 
 ```bash
-gnoman tui
+gnoman show github.com personal-token
 ```
 
-Navigate with arrow keys. q to quit.
+### Set or update a secret
 
-⸻
+```bash
+gnoman set github.com personal-token
+```
 
-🔒 **Security Posture**
-• All secrets loaded from keyring-first (never plaintext by default).
-• Wallet inventory persisted via AES-GCM with PBKDF2-HMAC derived keys.
-• Forensic logs signed with GNOMAN’s audit key and chained hashes.
-• Ephemeral execution to prevent key leakage.
-• Multisig-first design: never trust a single key.
+You will be prompted for the secret value when it is not provided directly.
 
-⸻
+### Export and import
 
-🛠️ **Roadmap**
-• Remote vault sync (Hashicorp Vault, AWS Secrets Manager).
-• ML-based anomaly detection in audit mode.
-• zk-proof attestation of audit reports.
-• Direct Flashbots bundle submission from dashboard.
+```bash
+gnoman export backup.gnoman
+# ... later ...
+gnoman import backup.gnoman
+```
 
-⸻
+Both operations prompt for a passphrase unless `--passphrase` is supplied.
 
-📋 **Implementation Reality Check**
+### Rotate credentials
 
-The current open-source snapshot uses deterministic fixtures and simulated managers to make the demo experience self-contained. Before treating GNOMAN as production-ready, review the [Implementation Status](docs/IMPLEMENTATION_STATUS.md) report that catalogues the gaps versus the latest developer directive.
+```bash
+gnoman rotate --services github.com,slack
+```
 
-⸻
+Regenerates high-entropy secrets for the selected services.
 
-🧑‍💻 **Authors**
+### Audit
 
-Built with obsession by Christopher Hirschauer (</gadget_saavy>).
+```bash
+gnoman audit --stale-days 90
+```
 
-⸻
+Produces a JSON report summarising duplicates, stale entries and other
+potential issues.
 
-### 💸 **Support GNOMAN Development**
+## Development
 
-If you appreciate the work behind GNOMAN, feel free to **donate** to support the continued development and improvement of this project:
+Tests exercise the platform-agnostic logic using the in-memory adapter:
 
-#### PayPal:
+```bash
+pip install -e .[dev]
+pytest
+```
 
-[Donate via PayPal](https://www.paypal.me/obeymythirst)
-
-#### Gnosis Safe:
-
-To donate directly to my Gnosis Safe, use the following address:
-
-**Gnosis Safe Address**: `eth:0xC6139506fa54c450948D9D2d8cCf269453A54f17`
-
----
-
-### **Key Updates**:
-1. **PayPal Donation Button**: I added a **PayPal donation link** for you. You can replace `yourusername` with your actual PayPal username.
-2. **Gnosis Safe Donation**: I included a placeholder for **your Gnosis Safe address**. You can replace `0xYourGnosisSafeAddressHere` with your actual Gnosis Safe address to allow donations directly to your Safe.
-
----
-
-### **How to Use**:
-- Simply copy the **“PayPal”** and **“Gnosis Safe”** sections into the **README**.
-- **Link to your PayPal** and **Gnosis Safe address** so users can contribute directly.
+The CLI interacts with the system keyring by default. Within unit tests the
+`gnoman.utils.keyring_backend.use_adapter` helper swaps in an in-memory backend
+to avoid touching real credentials.

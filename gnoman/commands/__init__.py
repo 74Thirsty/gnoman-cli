@@ -1,11 +1,23 @@
-"""CLI subcommand handlers for GNOMAN."""
+"""Command entry points for the GNOMAN CLI."""
 
-from . import audit, recover, safe, secrets, wallet  # noqa: F401
+from .keyring import (
+    audit,
+    delete_entry,
+    export_entries,
+    import_entries,
+    list_entries,
+    rotate_entries,
+    set_entry,
+    show_entry,
+)
 
 __all__ = [
     "audit",
-    "recover",
-    "safe",
-    "secrets",
-    "wallet",
+    "delete_entry",
+    "export_entries",
+    "import_entries",
+    "list_entries",
+    "rotate_entries",
+    "set_entry",
+    "show_entry",
 ]
