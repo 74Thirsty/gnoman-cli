@@ -82,6 +82,16 @@ def load_abi(name: str) -> List[Dict[str, Any]]:
     return _normalise_payload(payload)["abi"]
 
 
+def load_abi_from_file(path: str | Path) -> List[Dict[str, Any]]:
+    """Load an ABI definition directly from an arbitrary file path."""
+
+    file_path = Path(path).expanduser()
+    if not file_path.exists():
+        raise FileNotFoundError(f"ABI file not found: {file_path}")
+    payload = json.loads(file_path.read_text(encoding="utf-8"))
+    return _normalise_payload(payload)["abi"]
+
+
 def _function_signature(abi_entries: Iterable[Dict[str, Any]], method: str) -> Dict[str, Any]:
     for entry in abi_entries:
         if entry.get("type") == "function" and entry.get("name") == method:
@@ -224,12 +234,37 @@ def send_transaction(
         raise
 
 
+def load_store(path: str | Path) -> Dict[str, Any]:
+    """Load ABI selection metadata from ``path`` if it exists."""
+
+    store_path = Path(path).expanduser()
+    if not store_path.exists():
+        return {}
+    try:
+        return json.loads(store_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+
+
+def update_store(path: str | Path, last_path: str) -> Dict[str, Any]:
+    """Persist the last used ABI path to ``path`` and return the payload."""
+
+    store_path = Path(path).expanduser()
+    store_path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {"last_path": str(last_path)}
+    store_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return payload
+
+
 __all__ = [
     "list_abis",
     "load_abi",
+    "load_abi_from_file",
+    "load_store",
     "save_abi",
-    "simulate_call",
     "send_transaction",
+    "simulate_call",
+    "update_store",
 ]
 
 def _append_audit(action: str, params: Dict[str, Any], ok: bool, result: Dict[str, Any]) -> None:
