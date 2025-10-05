@@ -1,6 +1,5 @@
 """Terminal user interface components."""
 
-from .dashboard import launch_dashboard
-from .main import GNOMANMain
+from .terminal import TerminalUI, launch_terminal
 
-__all__ = ["GNOMANMain", "launch_dashboard"]
+__all__ = ["TerminalUI", "launch_terminal"]

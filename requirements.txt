@@ -1,3 +1,4 @@
+prompt_toolkit>=3.0.48
 keyring>=24.0.0
 secretstorage>=3.3.3
 web3>=6.0.0
