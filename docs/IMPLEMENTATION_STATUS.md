@@ -7,15 +7,15 @@ This document inventories the current state of the GNOMAN CLI versus the product
 ## Key Findings
 
 1. **Safe / Guard Integration**
-   * The command handlers in `gnoman/commands/safe.py` rely on `gnoman.utils.aes.SafeRegistry`, which is an in-memory placeholder. There is no bridge to an on-chain Gnosis Safe, no signing pipelines, and no DelayGuard deployment/validation logic.
-   * The guard daemon referenced in `gnoman/commands/guard.py` calls into a simulated event loop backed by static data. There is no contract watcher, queue management, or enforcement of guard invariants.
+   * The command handlers in `gnoman/commands/safe.py` rely on the in-memory registry defined in `gnoman/services/state.py`. There is no bridge to an on-chain Gnosis Safe, no signing pipelines, and no DelayGuard deployment/validation logic.
+   * Guardian/monitoring features have been removed from the CLI; there is no contract watcher, queue management, or enforcement of guard invariants.
 
 2. **Wallet + Key Management**
    * Wallet operations draw from deterministic fixtures held in memory (`WALLET_INVENTORY`) rather than an encrypted keystore. AES-GCM encryption, password handling, and entropy validation are not implemented.
    * Key rotation, vanity search, and HD derivation utilities are mocked through deterministic pseudo-random generators.
 
 3. **Secrets Synchronisation**
-   * `SecretsSyncCoordinator` manages a shared dict of stores, but there is no integration with OS keyrings, Hashicorp Vault, AWS Secrets Manager, or `.env.secure` files. Error handling assumes ideal conditions.
+   * `SecretsStore` manages a shared dict of stores, but there is no integration with OS keyrings, Hashicorp Vault, AWS Secrets Manager, or `.env.secure` files. Error handling assumes ideal conditions.
 
 4. **Forensic Logging**
    * `gnoman.utils.logbook` emits structured records, yet there is no tamper-evident append-only store nor signed audit trail. The existing `gnoman_audit.jsonl` file appears to contain sample data only.
@@ -30,7 +30,7 @@ Because of these gaps, the repository does not meet the directive's requirements
 ## Recommended Path Forward
 
 1. **Architecture Discovery**
-   * Define concrete interfaces for Safe registries, transaction queues, guard daemons, and encrypted wallet stores. Replace the placeholder AES managers with implementations that target real infrastructure (e.g., Web3.py + Safe contracts, SQLCipher, external secret stores).
+   * Define concrete interfaces for Safe registries, transaction queues, guard daemons, and encrypted wallet stores. Replace the placeholder in-memory services with implementations that target real infrastructure (e.g., Web3.py + Safe contracts, SQLCipher, external secret stores).
 
 2. **Incremental Hardening**
    * Implement AES-GCM encryption for wallet artifacts, including password derivation (PBKDF2/Argon2) and nonce management.

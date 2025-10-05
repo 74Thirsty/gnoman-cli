@@ -5,6 +5,22 @@ This project follows [Semantic Versioning](https://semver.org/) rules.
 
 ---
 
+## [Unreleased]
+
+### Added
+
+* Runtime service layer in `gnoman/services/state.py` providing Safe, secrets, audit, and recovery data without relying on AES mocks.
+
+### Changed
+
+* CLI scope narrowed to `wallet`, `safe`, `secrets`, `audit`, and `recover` commands; the TUI now mirrors this focused surface.
+
+### Removed
+
+* Deprecated AES-oriented prototypes (`sync`, `tx`, `graph`, `autopilot`, `plugin`, and `guard`) along with their mock dependencies.
+
+---
+
 ## [0.3.0] — 2025-10-01
 
 ### Added

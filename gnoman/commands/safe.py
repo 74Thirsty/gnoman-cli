@@ -4,18 +4,19 @@ from __future__ import annotations
 
 from typing import Dict
 
-from ..utils import aes, logbook
+from ..services import get_safe_vault
+from ..utils import logbook
 
 
 _DEF_SAFE = "0xSAFECORE"
 
 
-def _registry() -> aes.SafeRegistry:
-    return aes.get_safe_registry()
+def _vault():
+    return get_safe_vault()
 
 
 def propose(args) -> Dict[str, object]:
-    proposal = _registry().propose(args.to, args.value, args.data or "0x")
+    proposal = _vault().propose(args.to, args.value, args.data or "0x")
     record = {
         "action": "safe_propose",
         "safe": _DEF_SAFE,
@@ -27,7 +28,7 @@ def propose(args) -> Dict[str, object]:
 
 
 def sign(args) -> Dict[str, object]:
-    proposal = _registry().sign(args.proposal_id)
+    proposal = _vault().sign(args.proposal_id)
     record = {
         "action": "safe_sign",
         "proposal": proposal,
@@ -38,7 +39,7 @@ def sign(args) -> Dict[str, object]:
 
 
 def exec(args) -> Dict[str, object]:
-    proposal = _registry().execute(args.proposal_id)
+    proposal = _vault().execute(args.proposal_id)
     record = {
         "action": "safe_exec",
         "proposal": proposal,
@@ -49,7 +50,7 @@ def exec(args) -> Dict[str, object]:
 
 
 def status(args) -> Dict[str, object]:
-    info = _registry().status(args.safe_address)
+    info = _vault().status(args.safe_address)
     record = {
         "action": "safe_status",
         "safe": info,

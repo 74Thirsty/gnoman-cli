@@ -14,17 +14,11 @@ from unittest import mock
 
 from .commands import (
     audit as audit_cmd,
-    autopilot as autopilot_cmd,
-    graph as graph_cmd,
-    guard as guard_cmd,
-    plugin as plugin_cmd,
-    rescue as rescue_cmd,
+    recover as recover_cmd,
     safe as safe_cmd,
     secrets as secrets_cmd,
-    sync as sync_cmd,
-    tx as tx_cmd,
 )
-from .utils import aes, logbook
+from .utils import logbook
 
 MIN_HEIGHT = 18
 MIN_WIDTH = 70
@@ -63,20 +57,6 @@ MENU_ITEMS: List[MenuItem] = [
         ],
     },
     {
-        "key": "T",
-        "title": "Tx",
-        "tagline": "Simulate execution and broadcast confidently.",
-        "description": (
-            "Build Safe payloads, simulate strategies against an Anvil fork, "
-            "and execute pre-cleared proposals with traceability."
-        ),
-        "commands": [
-            "gnoman tx simulate [<proposal-id>] [--plan plan.json]",
-            "gnoman tx exec <proposal-id>",
-            "gnoman tx simulate --trace",
-        ],
-    },
-    {
         "key": "W",
         "title": "Wallet",
         "tagline": "Operate HD wallets and hidden derivation trees.",
@@ -96,7 +76,7 @@ MENU_ITEMS: List[MenuItem] = [
         "tagline": "Manage encrypted keyrings and vault entries.",
         "description": (
             "Rotate operator secrets, inspect stored credentials, and keep "
-            "sensitive material in sync across environments."
+            "sensitive material tidy across environments."
         ),
         "commands": [
             "gnoman secrets list",
@@ -105,31 +85,17 @@ MENU_ITEMS: List[MenuItem] = [
         ],
     },
     {
-        "key": "K",
-        "title": "Key Manager",
-        "tagline": "Work directly with keyring-backed secrets.",
+        "key": "R",
+        "title": "Recover",
+        "tagline": "Guide incident response and Safe restoration.",
         "description": (
-            "Add, retrieve, delete, or enumerate keyring entries just like the "
-            "original GNOMAN console workflow."
+            "Launch Safe recovery workflows, rotate signers, and freeze "
+            "compromised wallets until a coordinated unfreeze."
         ),
         "commands": [
-            "Mission Control › Key Manager",
-            "Add / retrieve / delete secrets",
-            "List keyring entries",
-        ],
-    },
-    {
-        "key": "Y",
-        "title": "Sync",
-        "tagline": "Reconcile .env, vault, and local state.",
-        "description": (
-            "Detect drift between secure storage, local secrets, and runtime "
-            "configuration then reconcile it interactively or forcefully."
-        ),
-        "commands": [
-            "gnoman sync",
-            "gnoman sync --reconcile",
-            "gnoman sync --force",
+            "gnoman recover safe <SAFE_ADDR>",
+            "gnoman recover rotate",
+            "gnoman recover freeze <wallet|safe> <id>",
         ],
     },
     {
@@ -145,71 +111,17 @@ MENU_ITEMS: List[MenuItem] = [
         ],
     },
     {
-        "key": "G",
-        "title": "Graph",
-        "tagline": "Visualise routing and liquidity insights.",
+        "key": "K",
+        "title": "Key Manager",
+        "tagline": "Work directly with keyring-backed secrets.",
         "description": (
-            "Render AES route graphs to SVG, PNG, or HTML to investigate "
-            "liquidity flows and profitable pathways."
+            "Add, retrieve, delete, or enumerate keyring entries just like the "
+            "original GNOMAN console workflow."
         ),
         "commands": [
-            "gnoman graph view --format svg",
-            "gnoman graph view --output custom/path",
-        ],
-    },
-    {
-        "key": "U",
-        "title": "Autopilot",
-        "tagline": "Assemble and validate the AES trading pipeline.",
-        "description": (
-            "Fetch loans, build trades, run ML validation, and queue or "
-            "broadcast Safe payloads directly from mission control."
-        ),
-        "commands": [
-            "gnoman autopilot --plan plan.json",
-            "gnoman autopilot --dry-run",
-            "gnoman autopilot --execute",
-        ],
-    },
-    {
-        "key": "R",
-        "title": "Rescue",
-        "tagline": "Guide incident response and safe recovery.",
-        "description": (
-            "Launch Safe recovery workflows, rotate signers, and freeze "
-            "compromised wallets until a coordinated unfreeze."
-        ),
-        "commands": [
-            "gnoman rescue safe <SAFE_ADDR>",
-            "gnoman rotate all",
-            "gnoman freeze <wallet|safe> <id>",
-        ],
-    },
-    {
-        "key": "P",
-        "title": "Plugins",
-        "tagline": "Curate optional integrations and tooling.",
-        "description": (
-            "List, install, remove, and hot-swap plugin packages while "
-            "maintaining a forensic history of version changes."
-        ),
-        "commands": [
-            "gnoman plugin list",
-            "gnoman plugin add <name>",
-            "gnoman plugin swap <name> <version>",
-        ],
-    },
-    {
-        "key": "D",
-        "title": "Guard",
-        "tagline": "Keep an eye on balances, quorum, and alerts.",
-        "description": (
-            "Run the System Guardian daemon to monitor gas, balances, "
-            "thresholds, and arbitrage alerts on a cadence."
-        ),
-        "commands": [
-            "gnoman guard",
-            "gnoman guard --cycles 5",
+            "Mission Control › Key Manager",
+            "Add / retrieve / delete secrets",
+            "List keyring entries",
         ],
     },
     {
@@ -1246,51 +1158,6 @@ def _legacy_action_safe_disable_guard(ctx: MenuContext) -> List[str]:
     return _run_legacy_callable(core_module.safe_toggle_guard, args=[False])
 
 
-def _action_tx_simulate(ctx: MenuContext) -> List[str]:
-    proposal_id = _prompt_input(ctx, "Proposal ID (optional)", required=False)
-    plan_path = _prompt_input(ctx, "Plan JSON path (optional)", required=False)
-    include_trace = _prompt_bool(ctx, "Include execution trace?", default=False)
-    ml_enabled = _prompt_bool(ctx, "Enable ML scoring?", default=True)
-    record, output = _invoke_command(
-        tx_cmd.simulate,
-        proposal_id=proposal_id,
-        plan=plan_path,
-        trace=include_trace,
-        ml_off=not ml_enabled,
-    )
-    lines = output or ["Simulation executed."]
-    if isinstance(record, dict):
-        lines.append(f"Plan digest: {record.get('plan_digest')}")
-        lines.append(f"Gas used: {record.get('gas_used')}")
-        success = record.get("success")
-        if success is not None:
-            lines.append(f"Success: {success}")
-        trace_steps = record.get("trace") or []
-        if trace_steps:
-            lines.append("Trace steps:")
-            lines.extend(f"  • {step}" for step in trace_steps)
-    return lines
-
-
-def _action_tx_exec(ctx: MenuContext) -> List[str]:
-    proposal_id = _prompt_input(ctx, "Proposal ID to queue", required=True)
-    record, output = _invoke_command(tx_cmd.exec, proposal_id=proposal_id)
-    lines = output or [f"Execution payload queued for {proposal_id}."]
-    if isinstance(record, dict):
-        path = record.get("payload_path")
-        if path:
-            lines.append(f"Payload written to {path}")
-    return lines
-
-
-def _build_tx_menu(ctx: MenuContext) -> Sequence[MenuEntry]:
-    return [
-        ("Simulate Safe/DeFi plan", _action_tx_simulate),
-        ("Queue execution payload", _action_tx_exec),
-        ("Back", None),
-    ]
-
-
 def _legacy_action_wallet_generate(ctx: MenuContext) -> List[str]:
     core_module = _load_core()
     return _run_legacy_callable(core_module.wal_generate_mnemonic)
@@ -1464,48 +1331,6 @@ def _build_key_manager_menu(ctx: MenuContext) -> Sequence[MenuEntry]:
     ]
 
 
-def _action_sync_inspect(ctx: MenuContext) -> List[str]:
-    coordinator = aes.get_secrets_coordinator()
-    snapshot = coordinator.snapshot()
-    drift = coordinator.detect_drift(snapshot)
-    status = "in-sync" if not drift else "drift"
-    logbook.info({"action": "sync_inspect", "status": status, "drift": drift})
-    if not drift:
-        return ["All secret stores aligned across environments."]
-    lines = ["Drift detected across stores:"]
-    for key, stores in drift.items():
-        store_values = ", ".join(f"{name}={value}" for name, value in stores.items())
-        lines.append(f"  • {key}: {store_values}")
-    return lines
-
-
-def _action_sync_reconcile(ctx: MenuContext) -> List[str]:
-    record, output = _invoke_command(sync_cmd.run, force=False, reconcile=True)
-    lines = output or ["Priority reconciliation complete."]
-    if isinstance(record, dict):
-        operations = record.get("operations") or []
-        lines.append(f"Applied {len(operations)} updates across stores.")
-    return lines
-
-
-def _action_sync_force(ctx: MenuContext) -> List[str]:
-    record, output = _invoke_command(sync_cmd.run, force=True, reconcile=False)
-    lines = output or ["Force sync applied across all stores."]
-    if isinstance(record, dict):
-        result = record.get("result") or {}
-        lines.append(f"Stores harmonised: {len(result)}")
-    return lines
-
-
-def _build_sync_menu(ctx: MenuContext) -> Sequence[MenuEntry]:
-    return [
-        ("Inspect drift", _action_sync_inspect),
-        ("Reconcile using priority order", _action_sync_reconcile),
-        ("Force sync now", _action_sync_force),
-        ("Back", None),
-    ]
-
-
 def _action_audit_snapshot(ctx: MenuContext) -> List[str]:
     record, output = _invoke_command(audit_cmd.run)
     lines = output or ["Audit snapshot generated."]
@@ -1526,73 +1351,9 @@ def _build_audit_menu(ctx: MenuContext) -> Sequence[MenuEntry]:
     ]
 
 
-def _make_graph_action(fmt: str) -> MenuCallback:
-    def _action(ctx: MenuContext) -> List[str]:
-        output_path = _prompt_input(ctx, "Custom output path (optional)", required=False)
-        record, output = _invoke_command(graph_cmd.view, format=fmt, output=output_path)
-        lines = output or [f"Rendered {fmt} graph."]
-        if isinstance(record, dict):
-            path = record.get("path")
-            if path:
-                lines.append(f"Saved to {path}")
-            highlighted = record.get("highlighted") or record.get("highlighted_routes") or []
-            if highlighted:
-                lines.append(f"Highlighted routes: {len(highlighted)}")
-        return lines
-
-    return _action
-
-
-def _build_graph_menu(ctx: MenuContext) -> Sequence[MenuEntry]:
-    return [
-        ("Render SVG", _make_graph_action("svg")),
-        ("Render HTML", _make_graph_action("html")),
-        ("Render PNG", _make_graph_action("png")),
-        ("Back", None),
-    ]
-
-
-def _make_autopilot_action(mode: str) -> MenuCallback:
-    def _action(ctx: MenuContext) -> List[str]:
-        plan_path = _prompt_input(ctx, "Plan JSON path (optional)", required=False)
-        flags = {"dry_run": False, "execute": False, "alerts_only": False}
-        if mode == "dry-run":
-            flags["dry_run"] = True
-        elif mode == "execute":
-            flags["execute"] = True
-        elif mode == "alerts":
-            flags["alerts_only"] = True
-        record, output = _invoke_command(
-            autopilot_cmd.run,
-            plan=plan_path,
-            dry_run=flags["dry_run"],
-            execute=flags["execute"],
-            alerts_only=flags["alerts_only"],
-        )
-        lines = output or [f"Autopilot completed in {mode} mode."]
-        if isinstance(record, dict):
-            lines.append(f"Mode: {record.get('mode')}")
-            steps = record.get("steps") or []
-            if steps:
-                lines.append(f"Steps executed: {len(steps)}")
-        return lines
-
-    return _action
-
-
-def _build_autopilot_menu(ctx: MenuContext) -> Sequence[MenuEntry]:
-    return [
-        ("Queue autopilot workflow", _make_autopilot_action("queue")),
-        ("Dry-run autopilot", _make_autopilot_action("dry-run")),
-        ("Execute autopilot now", _make_autopilot_action("execute")),
-        ("Alerts-only run", _make_autopilot_action("alerts")),
-        ("Back", None),
-    ]
-
-
-def _action_rescue_safe(ctx: MenuContext) -> List[str]:
+def _action_recover_safe(ctx: MenuContext) -> List[str]:
     safe_address = _prompt_input(ctx, "Safe address", default=DEFAULT_SAFE, required=False) or DEFAULT_SAFE
-    record, output = _invoke_command(rescue_cmd.rescue_safe, safe_address=safe_address)
+    record, output = _invoke_command(recover_cmd.recover_safe, safe_address=safe_address)
     lines = output or [f"Recovery wizard started for {safe_address}."]
     if isinstance(record, dict):
         steps = record.get("steps") or []
@@ -1602,8 +1363,8 @@ def _action_rescue_safe(ctx: MenuContext) -> List[str]:
     return lines
 
 
-def _action_rescue_rotate(ctx: MenuContext) -> List[str]:
-    record, output = _invoke_command(rescue_cmd.rotate_all)
+def _action_recover_rotate(ctx: MenuContext) -> List[str]:
+    record, output = _invoke_command(recover_cmd.rotate_all)
     lines = output or ["Rotation complete."]
     if isinstance(record, dict):
         owners = record.get("owners") or []
@@ -1612,12 +1373,12 @@ def _action_rescue_rotate(ctx: MenuContext) -> List[str]:
     return lines
 
 
-def _action_rescue_freeze(ctx: MenuContext) -> List[str]:
+def _action_recover_freeze(ctx: MenuContext) -> List[str]:
     target_type = _prompt_choice(ctx, "Target type", ["wallet", "safe"], default="wallet")
     target_id = _prompt_input(ctx, "Target identifier", required=True)
     reason = _prompt_input(ctx, "Reason", default="incident response", required=False) or "incident response"
     record, output = _invoke_command(
-        rescue_cmd.freeze,
+        recover_cmd.freeze,
         target_type=target_type,
         target_id=target_id,
         reason=reason,
@@ -1630,93 +1391,15 @@ def _action_rescue_freeze(ctx: MenuContext) -> List[str]:
     return lines
 
 
-def _build_rescue_menu(ctx: MenuContext) -> Sequence[MenuEntry]:
+def _build_recover_menu(ctx: MenuContext) -> Sequence[MenuEntry]:
     return [
-        ("Start Safe recovery", _action_rescue_safe),
-        ("Rotate all signers", _action_rescue_rotate),
-        ("Freeze wallet or Safe", _action_rescue_freeze),
+        ("Start Safe recovery", _action_recover_safe),
+        ("Rotate all signers", _action_recover_rotate),
+        ("Freeze wallet or Safe", _action_recover_freeze),
         ("Back", None),
     ]
 
 
-def _action_plugin_list(ctx: MenuContext) -> List[str]:
-    record, output = _invoke_command(plugin_cmd.list_plugins)
-    lines = output or ["Plugin registry snapshot fetched."]
-    if isinstance(record, dict):
-        plugins = record.get("plugins") or []
-        if plugins:
-            for entry in plugins:
-                lines.append(f"{entry.get('name')}@{entry.get('version')} ({entry.get('schema', 'n/a')})")
-        else:
-            lines.append("No plugins installed.")
-    return lines
-
-
-def _action_plugin_add(ctx: MenuContext) -> List[str]:
-    name = _prompt_input(ctx, "Plugin name", required=True)
-    record, output = _invoke_command(plugin_cmd.add_plugin, name=name)
-    lines = output or [f"Registered plugin {name}."]
-    if isinstance(record, dict):
-        plugin = record.get("plugin") or {}
-        if plugin:
-            lines.append(f"Version: {plugin.get('version', 'v1.0')}")
-    return lines
-
-
-def _action_plugin_remove(ctx: MenuContext) -> List[str]:
-    name = _prompt_input(ctx, "Plugin name to remove", required=True)
-    record, output = _invoke_command(plugin_cmd.remove_plugin, name=name)
-    lines = output or [f"Removal attempted for {name}."]
-    if isinstance(record, dict):
-        plugin = record.get("plugin") or {}
-        removed = plugin.get("removed")
-        lines.append("Removed." if removed else "Plugin missing.")
-    return lines
-
-
-def _action_plugin_swap(ctx: MenuContext) -> List[str]:
-    name = _prompt_input(ctx, "Plugin name", required=True)
-    version = _prompt_input(ctx, "Target version", required=True)
-    record, output = _invoke_command(plugin_cmd.swap, name=name, version=version)
-    lines = output or [f"Swap attempted for {name}."]
-    if isinstance(record, dict):
-        status = record.get("status")
-        lines.append(f"Status: {status}")
-        plugin = record.get("plugin") or {}
-        previous = plugin.get("previous_version")
-        if previous:
-            lines.append(f"{name}: {previous} → {plugin.get('version')}")
-    return lines
-
-
-def _build_plugins_menu(ctx: MenuContext) -> Sequence[MenuEntry]:
-    return [
-        ("List plugins", _action_plugin_list),
-        ("Add plugin", _action_plugin_add),
-        ("Remove plugin", _action_plugin_remove),
-        ("Swap plugin version", _action_plugin_swap),
-        ("Back", None),
-    ]
-
-
-def _action_guard_run(ctx: MenuContext) -> List[str]:
-    cycles = _prompt_int(ctx, "Number of guard cycles", default=3, minimum=1) or 3
-    record, output = _invoke_command(guard_cmd.run, cycles=cycles)
-    lines = output or [f"Guardian executed for {cycles} cycle(s)."]
-    if isinstance(record, dict):
-        alerts = record.get("alerts") or []
-        if alerts:
-            lines.append(f"Alerts: {', '.join(alerts)}")
-        else:
-            lines.append("No alerts raised.")
-    return lines
-
-
-def _build_guard_menu(ctx: MenuContext) -> Sequence[MenuEntry]:
-    return [
-        ("Run monitoring cycles", _action_guard_run),
-        ("Back", None),
-    ]
 
 
 def _legacy_action_about(ctx: MenuContext) -> List[str]:
@@ -1728,8 +1411,6 @@ def _show_safe_menu(ctx: MenuContext) -> None:
     _open_submenu(ctx, "Safe", _build_safe_menu)
 
 
-def _show_tx_menu(ctx: MenuContext) -> None:
-    _open_submenu(ctx, "Tx", _build_tx_menu)
 
 
 def _show_wallet_menu(ctx: MenuContext) -> None:
@@ -1744,32 +1425,22 @@ def _show_key_manager_menu(ctx: MenuContext) -> None:
     _open_submenu(ctx, "Key Manager", _build_key_manager_menu)
 
 
-def _show_sync_menu(ctx: MenuContext) -> None:
-    _open_submenu(ctx, "Sync", _build_sync_menu)
 
 
 def _show_audit_menu(ctx: MenuContext) -> None:
     _open_submenu(ctx, "Audit", _build_audit_menu)
 
 
-def _show_graph_menu(ctx: MenuContext) -> None:
-    _open_submenu(ctx, "Graph", _build_graph_menu)
 
 
-def _show_autopilot_menu(ctx: MenuContext) -> None:
-    _open_submenu(ctx, "Autopilot", _build_autopilot_menu)
 
 
-def _show_rescue_menu(ctx: MenuContext) -> None:
-    _open_submenu(ctx, "Rescue", _build_rescue_menu)
+def _show_recover_menu(ctx: MenuContext) -> None:
+    _open_submenu(ctx, "Recover", _build_recover_menu)
 
 
-def _show_plugins_menu(ctx: MenuContext) -> None:
-    _open_submenu(ctx, "Plugins", _build_plugins_menu)
 
 
-def _show_guard_menu(ctx: MenuContext) -> None:
-    _open_submenu(ctx, "Guard", _build_guard_menu)
 
 
 def _show_about_menu(ctx: MenuContext) -> None:
@@ -1845,17 +1516,11 @@ def _show_about_menu(ctx: MenuContext) -> None:
 
 SUBMENU_DISPATCH: Dict[str, Callable[[MenuContext], None]] = {
     "Safe": _show_safe_menu,
-    "Tx": _show_tx_menu,
     "Wallet": _show_wallet_menu,
     "Secrets": _show_secrets_menu,
-    "Key Manager": _show_key_manager_menu,
-    "Sync": _show_sync_menu,
+    "Recover": _show_recover_menu,
     "Audit": _show_audit_menu,
-    "Graph": _show_graph_menu,
-    "Autopilot": _show_autopilot_menu,
-    "Rescue": _show_rescue_menu,
-    "Plugins": _show_plugins_menu,
-    "Guard": _show_guard_menu,
+    "Key Manager": _show_key_manager_menu,
     "About": _show_about_menu,
 }
 
