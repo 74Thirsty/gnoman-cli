@@ -4,35 +4,10 @@ import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-import keyring
-import keyring.backend
 import pytest
 
 from gnoman.core.secrets_manager import SecretsManager
 from gnoman.utils import keyring_backend
-
-
-class MemoryKeyring(keyring.backend.KeyringBackend):
-    priority = 1
-
-    def __init__(self) -> None:
-        self._data: dict[tuple[str, str], str] = {}
-
-    def get_password(self, service: str, username: str) -> str | None:
-        return self._data.get((service, username))
-
-    def set_password(self, service: str, username: str, password: str) -> None:
-        self._data[(service, username)] = password
-
-    def delete_password(self, service: str, username: str) -> None:
-        self._data.pop((service, username), None)
-
-
-@pytest.fixture()
-def isolated_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    monkeypatch.setenv("GNOMAN_HOME", str(tmp_path))
-    keyring.set_keyring(MemoryKeyring())
-    return tmp_path
 
 
 def test_secret_roundtrip_and_rotation(isolated_home: Path) -> None:

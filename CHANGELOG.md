@@ -7,21 +7,20 @@ This project follows [Semantic Versioning](https://semver.org/) rules.
 
 ## [Unreleased]
 
-## [1.0.0] — 2025-10-05
+## [1.1.0] — Rebuild & Restoration
 
-### Added
-
-* Cross-platform keyring enumeration helpers with platform specific adapters.
-* Encrypted export/import format with passphrase-based protection.
-
-### Changed
-
-* CLI rebuilt around `list`, `show`, `set`, `delete`, `export`, `import`, `rotate`, and `audit` commands.
-* Documentation rewritten to describe GNOMAN as a universal keyring manager.
+### Restored
+* Mission-control dashboard (Textual-based).
+* Wallet, Safe, and Audit subsystems.
+* Drift detection and sync view.
+* Real-time forensic logging.
 
 ### Removed
+* Temporary CLI-only architecture introduced in 1.0.0.
 
-* Legacy Safe, wallet, and AES-oriented modules along with their supporting utilities.
+### Added
+* Cross-platform keyring adapter layer.
+* Encrypted export/import using passphrase-protected JSON.
 
 ---
 
