@@ -26,8 +26,11 @@ pip install gnoman-cli
 ## Usage
 
 ```
-usage: gnoman [-h] [--version] {list,show,set,delete,export,import,rotate,audit} ...
+usage: gnoman [-h] [--gui] [--version] {list,show,set,delete,export,import,rotate,audit} ...
 ```
+
+Pass the optional ``--gui`` flag to launch a lightweight Tkinter desktop interface focused on
+secret management.
 
 ### List keyring entries
 

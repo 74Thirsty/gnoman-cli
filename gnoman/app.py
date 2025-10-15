@@ -1,7 +1,8 @@
-"""Application entry point launching the GNOMAN console dashboard."""
+"""Application entry point launching the GNOMAN interfaces."""
 
 from __future__ import annotations
 
+import argparse
 import importlib.util
 import logging
 import sys
@@ -91,10 +92,34 @@ def _launch_terminal() -> None:
         logging.shutdown()
 
 
+def _launch_gui() -> None:
+    """Start the lightweight Tkinter based GUI."""
+
+    from .ui.simple_gui import SimpleGUI
+
+    try:
+        append_record("ui.start", {"version": __version__}, True, {"mode": "gui"})
+    except (NotImplementedError, ValueError):
+        pass
+
+    SimpleGUI().run()
+
+
 def main(argv: Optional[Sequence[str]] = None) -> None:
     """Start GNOMAN Mission Control."""
 
-    _launch_terminal()
+    parser = argparse.ArgumentParser(description="GNOMAN mission control launcher")
+    parser.add_argument(
+        "--gui",
+        action="store_true",
+        help="Launch the experimental Tkinter GUI instead of the terminal dashboard.",
+    )
+    options = parser.parse_args(list(argv) if argv is not None else None)
+
+    if options.gui:
+        _launch_gui()
+    else:
+        _launch_terminal()
 
 
 __all__ = ["main"]
