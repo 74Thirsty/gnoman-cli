@@ -17,6 +17,7 @@ from web3.providers.eth_tester import EthereumTesterProvider
 
 try:  # pragma: no cover - optional dependency
     from bip_utils import (
+        Bip32Slip10Secp256k1,
         Bip39MnemonicGenerator,
         Bip39SeedGenerator,
         Bip39WordsNum,
@@ -24,6 +25,7 @@ try:  # pragma: no cover - optional dependency
         Bip44Coins,
     )
 except Exception:  # pragma: no cover - dependency may be absent during tests
+    Bip32Slip10Secp256k1 = None  # type: ignore[assignment]
     Bip39MnemonicGenerator = None  # type: ignore[assignment]
 
 from ..utils import keyring_backend
@@ -113,9 +115,14 @@ class WalletManager:
         if Bip39MnemonicGenerator is not None:  # pragma: no cover - depends on optional dependency
             seed_bytes = Bip39SeedGenerator(mnemonic).Generate(passphrase)
             bip_obj = Bip44.FromSeed(seed_bytes, Bip44Coins.ETHEREUM)
-            node = bip_obj.DerivePath(derivation_path)
-            private_key = node.PrivateKey().Raw().ToBytes()
-            return Account.from_key(private_key)
+            if hasattr(bip_obj, "DerivePath"):
+                node = bip_obj.DerivePath(derivation_path)  # type: ignore[attr-defined]
+                private_key = node.PrivateKey().Raw().ToBytes()
+                return Account.from_key(private_key)
+            if Bip32Slip10Secp256k1 is not None:
+                slip_node = Bip32Slip10Secp256k1.FromSeed(seed_bytes).DerivePath(derivation_path)
+                private_key = slip_node.PrivateKey().Raw().ToBytes()
+                return Account.from_key(private_key)
         return Account.from_mnemonic(mnemonic, account_path=derivation_path, passphrase=passphrase)
 
     def _store_wallet(
