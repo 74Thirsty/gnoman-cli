@@ -15,16 +15,28 @@ from typing import Dict, Iterable, Iterator, List, Optional, Protocol, Tuple
 import keyring
 from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
+from keyring.errors import PasswordDeleteError
 
 from .env_tools import get_gnoman_home
 
 
-@dataclass
+@dataclass(order=True)
 class KeyringEntry:
+    sort_index: Tuple[str, str] = field(init=False, repr=False)
     service: str
     username: str
-    secret: Optional[str] = None
-    metadata: Dict[str, object] = field(default_factory=dict)
+    secret: Optional[str] = field(default=None, compare=False)
+    metadata: Dict[str, object] = field(default_factory=dict, compare=False)
+
+    def __post_init__(self) -> None:
+        self.service = str(self.service or "")
+        self.username = str(self.username or "")
+        if not isinstance(self.metadata, dict):
+            try:
+                self.metadata = dict(self.metadata)  # type: ignore[arg-type]
+            except Exception:
+                self.metadata = {}
+        self.sort_index = (self.service.casefold(), self.username.casefold())
 
 class KeyringAdapter(Protocol):
     """Protocol implemented by every platform backend."""
@@ -40,6 +52,25 @@ class KeyringAdapter(Protocol):
 
     def delete_secret(self, service: str, username: str) -> None:
         ...
+
+
+def _deduplicate_entries(entries: Iterable[KeyringEntry]) -> List[KeyringEntry]:
+    """Collapse duplicate keyring entries preserving the first occurrence."""
+
+    unique: Dict[Tuple[str, str], KeyringEntry] = {}
+    for entry in entries:
+        key = (entry.service.casefold(), entry.username.casefold())
+        existing = unique.get(key)
+        if existing is None:
+            unique[key] = entry
+            continue
+        if entry.metadata:
+            merged = dict(existing.metadata)
+            merged.update(entry.metadata)
+            existing.metadata = merged
+        if existing.secret is None and entry.secret is not None:
+            existing.secret = entry.secret
+    return sorted(unique.values())
 
 
 class KeyringLibraryAdapter:
@@ -336,7 +367,7 @@ def _detect_adapter() -> KeyringAdapter:
 
 def list_all_entries() -> List[KeyringEntry]:
     adapter = _detect_adapter()
-    return adapter.list_entries()
+    return _deduplicate_entries(adapter.list_entries())
 
 
 def get_entry(service: str, username: str) -> Optional[KeyringEntry]:
@@ -344,7 +375,7 @@ def get_entry(service: str, username: str) -> Optional[KeyringEntry]:
     secret = adapter.get_secret(service, username)
     if secret is None:
         return None
-    for entry in adapter.list_entries():
+    for entry in _deduplicate_entries(adapter.list_entries()):
         if entry.service == service and entry.username == username:
             return KeyringEntry(
                 service=service,
